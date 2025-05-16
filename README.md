@@ -1,5 +1,33 @@
 # OphthalmoScan-AI
 
+A web application for ophthalmology diagnosis and patient management using AI technologies.
+
+## Repository
+
+- GitHub: https://github.com/Abdelbassetelab/OphthalmoScan_App.git
+
+## Getting Started
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Abdelbassetelab/OphthalmoScan_App.git
+   cd OphthalmoScan_App
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Set up environment variables:
+   - Copy `.env.example` to `.env.local`
+   - Update the variables with your configuration
+
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
 ## Application Routes
 
 ### Main Routes
