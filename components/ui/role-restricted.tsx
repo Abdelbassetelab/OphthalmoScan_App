@@ -1,6 +1,6 @@
 'use client';
 
-import { useUserRole } from '@/hooks/use-user-role';
+import useUserRole from '@/hooks/use-user-role';
 import type { UserRole } from '@/lib/auth/clerk-auth';
 import { PropsWithChildren } from 'react';
 

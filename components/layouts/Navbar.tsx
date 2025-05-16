@@ -27,12 +27,12 @@ export function Navbar({ onToggleSidebar, sidebarCollapsed }: NavbarProps) {
   const getDashboardPath = (): string => {
     switch (userRole) {
       case 'admin':
-        return '/dashboard';
+        return '/dashboard/admin';
       case 'doctor':
-        return '/dashboard';
+        return '/dashboard/doctor';
       case 'patient':
       default:
-        return '/dashboard';
+        return '/dashboard/patient';
     }
   };
 
@@ -40,6 +40,12 @@ export function Navbar({ onToggleSidebar, sidebarCollapsed }: NavbarProps) {
   const handleOpenUserProfile = () => {
     setUserMenuOpen(false);
     openUserProfile();
+  };
+
+  // Format role for display with proper capitalization
+  const getDisplayRole = (): string => {
+    if (!userRole) return 'Loading...';
+    return userRole.charAt(0).toUpperCase() + userRole.slice(1);
   };
 
   return (
@@ -75,7 +81,6 @@ export function Navbar({ onToggleSidebar, sidebarCollapsed }: NavbarProps) {
               onClick={() => setUserMenuOpen(!userMenuOpen)}
               className="flex items-center space-x-2 focus:outline-none ml-1"
             >
-              {/* Clerk User Profile Image */}
               {user?.imageUrl ? (
                 <div className="w-8 h-8 rounded-full overflow-hidden">
                   <Image 
@@ -90,11 +95,10 @@ export function Navbar({ onToggleSidebar, sidebarCollapsed }: NavbarProps) {
                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
                   <User className="h-4 w-4" />
                 </div>
-              )}              <div className="hidden md:block text-left">
+              )}
+              <div className="hidden md:block text-left">
                 <p className="text-sm font-medium">{userFullName}</p>
-                <p className="text-xs text-gray-500 capitalize">
-                  {userRole ? userRole.charAt(0).toUpperCase() + userRole.slice(1) : 'Loading...'}
-                </p>
+                <p className="text-xs text-gray-500">{getDisplayRole()}</p>
               </div>
               <ChevronDown className="h-4 w-4 text-gray-500" />
             </button>
