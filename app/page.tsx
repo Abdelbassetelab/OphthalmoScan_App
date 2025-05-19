@@ -68,7 +68,7 @@ export default function Home() {
             </div>
             
             <button 
-              onClick={() => router.push('/dashboard/patient')}
+              onClick={() => router.push('/dashboard')}
               className="group bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded text-center transition-colors duration-300"
             >
               Go to Dashboard

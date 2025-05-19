@@ -19,11 +19,6 @@ This document provides a comprehensive list of all the valid navigation links in
 - `/scans/[id]` - Individual scan view
 - `/scans/ai-analysis` - AI analysis of scans
 
-## User Management (Admin)
-- `/admin/users` - User management
-- `/admin/doctors` - Doctor directory
-- `/admin/reports` - System reports
-
 ## Analytics (Admin)
 - `/analytics/usage` - System usage statistics
 - `/analytics/scans` - Scan statistics

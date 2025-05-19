@@ -65,26 +65,7 @@ export default function DashboardPage() {
           <h2 className="text-xl font-medium text-gray-700">Loading your dashboard</h2>
         </div>
       </div>
-    );  }  return (    <MainLayout>
-      <div className="space-y-6">
-        <div className="bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300 p-5">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-            <div>              <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                Welcome back, Doctor {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
-              </h1>
-              <p className="text-gray-500">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            </div>
-              <div className="mt-4 md:mt-0">
-              <div className="px-4 py-2 bg-blue-50 rounded-lg flex items-center">
-                <div className="w-3 h-3 rounded-full bg-[#0A84FF] mr-2"></div>
-                <span className="text-sm font-medium text-gray-700">Patient Queue: 
-                  <span className="ml-1 text-[#0A84FF]">1 waiting</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
+    );  }  return (    <MainLayout>      <div className="space-y-6">
         <div className="space-y-8 md:space-y-6">
           {userRole === 'admin' && <AdminDashboard />}
           {userRole === 'doctor' && <DoctorDashboard />}

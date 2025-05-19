@@ -1,101 +1,172 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { useAuth } from '@clerk/nextjs'
-import { setRole, removeRole } from '@/app/management/_actions'
+import { useEffect, useState } from 'react';
+import { useSession, useUser } from '@clerk/nextjs';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import AddUserForm from './add-user-form';
+import { useSupabaseWithClerk } from '@/lib/auth/supabase-clerk';
 
-export default function UsersManagement() {
-  const { getToken } = useAuth()
-  const [message, setMessage] = useState('')
+type User = {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  last_sign_in: string;
+};
 
-  const handleSetRole = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const result = await setRole(formData)
-    setMessage(JSON.stringify(result.message))
-  }
-
-  const handleRemoveRole = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const result = await removeRole(formData)
-    setMessage(JSON.stringify(result.message))
-  }
-
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">User Role Management</h1>
+export default function UsersManagementPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Get Clerk user
+  const { user } = useUser();
+  
+  // Get Supabase client with Clerk auth
+  const { supabase, isLoaded } = useSupabaseWithClerk();
+  
+  useEffect(() => {
+    async function fetchUsers() {
+      if (!isLoaded || !supabase || !user) return;
       
-      {/* Set Role Form */}
-      <form onSubmit={handleSetRole} className="mb-8">
-        <h2 className="text-xl font-semibold mb-4">Set User Role</h2>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="id" className="block text-sm font-medium text-gray-700">
-              User ID
-            </label>
-            <input
-              type="text"
-              name="id"
-              id="id"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            />
-          </div>
-          <div>
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-              Role
-            </label>
-            <select
-              name="role"
-              id="role"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            >
-              <option value="admin">Admin</option>
-              <option value="doctor">Doctor</option>
-              <option value="patient">Patient</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            Set Role
-          </button>
-        </div>
-      </form>
+      try {
+        console.log("Fetching users from Supabase with authenticated client...");
+        
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, email, role, created_at, last_sign_in')
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error("Supabase error:", error);
+          throw error;
+        }
+        
+        console.log("Fetched users:", data);
+        setUsers(data || []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred fetching users');
+      } finally {
+        setLoading(false);
+      }
+    }
 
-      {/* Remove Role Form */}
-      <form onSubmit={handleRemoveRole}>
-        <h2 className="text-xl font-semibold mb-4">Remove User Role</h2>
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="remove-id" className="block text-sm font-medium text-gray-700">
-              User ID
-            </label>
-            <input
-              type="text"
-              name="id"
-              id="remove-id"
-              required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-          >
-            Remove Role
-          </button>
-        </div>
-      </form>
+    fetchUsers();
+  }, [user, refreshTrigger, supabase, isLoaded]);
+  
+  async function updateUserRole(userId: string, newRole: string) {
+    if (!supabase) {
+      setError('Supabase client not initialized');
+      return;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', userId);
 
-      {message && (
-        <div className="mt-4 p-4 bg-gray-100 rounded">
-          <pre>{message}</pre>
-        </div>
-      )}
+      if (error) throw error;
+
+      // Update local state
+      setUsers(users.map(user => 
+        user.id === userId ? { ...user, role: newRole } : user
+      ));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error updating user role');
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4">
+        <Card className="p-6 bg-red-50 border-red-200">
+          <h2 className="text-lg font-semibold text-red-700">Error</h2>
+          <p className="text-red-600">{error}</p>
+        </Card>
+      </div>
+    );
+  }
+  return (
+    <div className="p-6 space-y-6">      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">User Management</h1>
+        <Button 
+          onClick={() => setRefreshTrigger(prev => prev + 1)}
+          variant="outline"
+        >
+          Refresh Users
+        </Button>
+      </div>
+
+      <AddUserForm />
+
+      <Card className="p-6">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Email</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Created At</TableHead>
+              <TableHead>Last Sign In</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.length > 0 ? (
+              users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <select
+                      value={user.role}
+                      onChange={(e) => updateUserRole(user.id, e.target.value)}
+                      className="border rounded px-2 py-1"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="doctor">Doctor</option>
+                      <option value="patient">Patient</option>
+                    </select>
+                  </TableCell>
+                  <TableCell>
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    {user.last_sign_in ? new Date(user.last_sign_in).toLocaleDateString() : 'Never'}
+                  </TableCell>
+                  <TableCell>
+                    {/* Add more actions here if needed */}
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-6">
+                  <p className="text-gray-500">No users found in the database.</p>
+                  <p className="text-sm text-gray-400 mt-2">You need to add users to your Supabase database.</p>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
-  )
+  );
 }
