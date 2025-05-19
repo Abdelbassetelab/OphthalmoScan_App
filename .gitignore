@@ -42,3 +42,11 @@ next-env.d.ts
 
 # OS
 Thumbs.db
+
+# Large model files
+*.h5
+*.weights
+*.bin
+/public/model/**/*.h5
+/public/models/**/*.h5
+/backend/model/**/*.h5
