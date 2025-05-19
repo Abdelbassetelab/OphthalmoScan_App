@@ -133,62 +133,55 @@ export default function PatientDashboardPage() {
       default: return 'text-gray-500';
     }
   };
-
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <Card className="p-6 bg-white shadow-sm rounded-xl border-none">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">
-              Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
-            </h1>
-            <p className="text-gray-500">{currentDate}</p>
-          </div>
-          {mockData.appointments.next && (
-            <div className="mt-4 md:mt-0 px-4 py-2 bg-blue-50 rounded-lg flex items-center">
-              <div className="w-3 h-3 rounded-full bg-[#0A84FF] mr-2"></div>
-              <span className="text-sm font-medium text-gray-700">Next Appointment: 
-                <span className="ml-1 text-[#0A84FF]">
-                  {countdown.days}d {countdown.hours}h {countdown.minutes}m
-                </span>
-              </span>
-            </div>
-          )}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">
+            Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
+          </h1>
+          <p className="text-gray-500">{currentDate}</p>
         </div>
-      </Card>
-      
-      {/* Quick Actions Panel - At the top for immediate access */}
-      <Card className="p-5 bg-white shadow-sm rounded-xl border-none">
+        {mockData.appointments.next && (
+          <div className="mt-4 md:mt-0 px-4 py-2 bg-blue-50 rounded-lg flex items-center">
+            <div className="w-3 h-3 rounded-full bg-[#0A84FF] mr-2"></div>
+            <span className="text-sm font-medium text-gray-700">Next Appointment: 
+              <span className="ml-1 text-[#0A84FF]">
+                {countdown.days}d {countdown.hours}h {countdown.minutes}m
+              </span>
+            </span>
+          </div>
+        )}
+      </div>
+        {/* Quick Actions Panel - At the top for immediate access */}
+      <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
         <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Actions</h3>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <a href="/dashboard/patient/scans/upload" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
-            <Upload className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2" />
-            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF]">Upload New Scan</span>
+            <Upload className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2 transition-colors" />
+            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">Upload New Scan</span>
           </a>
-          
-          <a href="/dashboard/patient/messages" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
-            <MessageSquare className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2" />
-            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF]">Message Doctor</span>
+            <a href="/dashboard/patient/messages" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
+            <MessageSquare className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2 transition-colors" />
+            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">Message Doctor</span>
           </a>
           
           <a href="/dashboard/patient/prescriptions/refill" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
-            <RefreshCw className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2" />
-            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF]">Request Refill</span>
+            <RefreshCw className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2 transition-colors" />
+            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">Request Refill</span>
           </a>
           
           <a href="/dashboard/patient/resources" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
-            <BookOpen className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2" />
-            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF]">Educational Resources</span>
+            <BookOpen className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2 transition-colors" />
+            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">Educational Resources</span>
           </a>
         </div>
-      </Card>
-      
-      {/* Main Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      </Card>      {/* Main Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Upcoming Appointments Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-blue-100">
               <Calendar className="h-5 w-5 text-[#0A84FF]" />
@@ -255,9 +248,8 @@ export default function PatientDashboardPage() {
             </div>
           )}
         </Card>
-        
-        {/* Scan Results Status Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          {/* Scan Results Status Card */}
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-indigo-100">
               <Eye className="h-5 w-5 text-indigo-600" />
@@ -308,9 +300,8 @@ export default function PatientDashboardPage() {
             </div>
           </div>
         </Card>
-        
-        {/* Treatment Plan Summary */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          {/* Treatment Plan Summary */}
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-teal-100">
               <FileText className="h-5 w-5 text-[#20C997]" />
@@ -366,9 +357,8 @@ export default function PatientDashboardPage() {
             </div>
           </div>
         </Card>
-        
-        {/* Health Metrics Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          {/* Health Metrics Card */}
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-purple-100">
               <TrendingUp className="h-5 w-5 text-purple-600" />

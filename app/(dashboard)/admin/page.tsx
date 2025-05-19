@@ -57,31 +57,21 @@ export default function AdminDashboardPage() {
     setGreeting('Welcome back');
     setCurrentDate(formatCurrentDate());
   }, []);
-
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <Card className="p-6 bg-white shadow-sm rounded-xl border-none">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">
-              Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
-            </h1>
-            <p className="text-gray-500">{currentDate}</p>
-          </div>
-          <div className="mt-4 md:mt-0 px-4 py-2 bg-blue-50 rounded-lg flex items-center">
-            <div className="w-3 h-3 rounded-full bg-[#0A84FF] mr-2"></div>
-            <span className="text-sm font-medium text-gray-700">System Status: 
-              <span className="ml-1 text-[#0A84FF]">All systems operational</span>
-            </span>
-          </div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">
+            Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
+          </h1>
+          <p className="text-gray-500">{currentDate}</p>
         </div>
-      </Card>
-      
-      {/* Metric Cards Grid - Simplified */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      </div>
+        {/* Metric Cards Grid - Simplified */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* Total Users Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-blue-100">
               <Users className="h-5 w-5 text-[#0A84FF]" />
@@ -99,9 +89,8 @@ export default function AdminDashboardPage() {
             <span>{mockData.userRoles.admins} Admins</span>
           </div>
         </Card>
-        
-        {/* System Health Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          {/* System Health Card */}
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-green-100">
               <Server className="h-5 w-5 text-[#20C997]" />
@@ -121,9 +110,8 @@ export default function AdminDashboardPage() {
             DB: {mockData.systemHealth.dbLatency} | API: {mockData.systemHealth.apiResponseTime}
           </div>
         </Card>
-        
-        {/* Scan Statistics Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          {/* Scan Statistics Card */}
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-indigo-100">
               <Eye className="h-5 w-5 text-indigo-600" />
@@ -139,9 +127,8 @@ export default function AdminDashboardPage() {
             <span className="text-gray-500">Pending: <span className="font-medium text-amber-600">{mockData.scanStats.pending}</span></span>
           </div>
         </Card>
-        
-        {/* Diagnosis Activity Card */}
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          {/* Diagnosis Activity Card */}
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <div className="flex justify-between items-center mb-3">
             <div className="rounded-full p-2 bg-teal-100">
               <Stethoscope className="h-5 w-5 text-[#20C997]" />
@@ -163,18 +150,16 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
       </div>
-      
-      {/* Admin Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+        {/* Admin Quick Links */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mt-6">
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <h2 className="text-lg font-semibold mb-2">User Management</h2>
           <p className="text-gray-600 mb-3">Manage users, roles and permissions</p>
           <a href="/dashboard/admin/users" className="text-[#0A84FF] hover:text-blue-700 font-medium">
             View Users →
           </a>
         </Card>
-        
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+          <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <h2 className="text-lg font-semibold mb-2">System Analytics</h2>
           <p className="text-gray-600 mb-3">View system usage and performance metrics</p>
           <a href="/dashboard/admin/analytics" className="text-[#0A84FF] hover:text-blue-700 font-medium">
@@ -182,19 +167,17 @@ export default function AdminDashboardPage() {
           </a>
         </Card>
         
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow">
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <h2 className="text-lg font-semibold mb-2">Audit Logs</h2>
           <p className="text-gray-600 mb-3">Review system audit logs and activities</p>
           <a href="/dashboard/admin/logs" className="text-[#0A84FF] hover:text-blue-700 font-medium">
             View Logs →
           </a>
         </Card>
-      </div>
-      
-      {/* Recent Activity Section */}
+      </div>      {/* Recent Activity Section */}
       <div className="mt-8">
         <h2 className="text-2xl font-bold mb-4">Recent Activity</h2>
-        <Card className="p-5 bg-white shadow-sm rounded-xl border-none">
+        <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
           <p className="text-gray-600">No recent activity to display</p>
         </Card>
       </div>

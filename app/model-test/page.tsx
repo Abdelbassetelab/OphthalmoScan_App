@@ -1,0 +1,186 @@
+'use client';
+
+import { useState } from 'react';
+import Image from 'next/image';
+import { FileImage, UploadCloud } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { predictEyeDisease } from '@/lib/ai/predict-disease';
+
+interface AnalysisResult {
+  prediction: string;
+  confidence: number;
+  allPredictions: { label: string; probability: number }[];
+}
+
+export default function ModelTestPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const { toast } = useToast();
+
+  // Sample images
+  const sampleImages = [
+    { name: "1435_leftca.jpg", label: "Cataract Sample" },
+    { name: "10007_right_dr.jpeg", label: "Diabetic Retinopathy Sample" },
+    { name: "1212_rightg.jpg", label: "Glaucoma Sample" }
+  ];
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+      setResult(null);
+    }
+  };
+
+  const analyzeSampleImage = async (imageName: string) => {
+    try {
+      setIsAnalyzing(true);
+      const response = await fetch(`/model/${imageName}`);
+      const blob = await response.blob();
+      const file = new File([blob], imageName, { type: 'image/jpeg' });
+      
+      const predictionResult = await predictEyeDisease(file);
+      
+      if (!predictionResult) {
+        throw new Error('Failed to analyze the image');
+      }
+      
+      const predictions = Object.entries(predictionResult.predictions).map(([label, probability]) => ({
+        label,
+        probability: probability * 100
+      }));
+      
+      const sortedPredictions = [...predictions].sort((a, b) => b.probability - a.probability);
+      
+      setResult({
+        prediction: predictionResult.top_prediction,
+        confidence: sortedPredictions[0].probability,
+        allPredictions: sortedPredictions,
+      });
+      
+      toast({
+        title: 'Analysis Complete',
+        description: `Primary diagnosis: ${formatCondition(predictionResult.top_prediction)}`,
+        variant: 'default',
+      });
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      toast({
+        title: 'Analysis Failed',
+        description: error instanceof Error ? error.message : 'Failed to analyze the image',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const formatCondition = (condition: string): string => {
+    return condition
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  return (
+    <div className="container mx-auto p-6 space-y-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Model Testing Dashboard</h1>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Sample Images Card */}
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Sample Images</h2>
+          <div className="space-y-4">
+            {sampleImages.map((sample) => (
+              <div key={sample.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <FileImage className="h-5 w-5 text-blue-500" />
+                  <span>{sample.label}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => analyzeSampleImage(sample.name)}
+                  disabled={isAnalyzing}
+                >
+                  Test
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Upload Card */}
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Custom Image Upload</h2>
+          <div className="space-y-4">
+            <div className="border-2 border-dashed border-gray-200 rounded-lg p-6">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+                id="file-upload"
+                disabled={isAnalyzing}
+              />
+              <label
+                htmlFor="file-upload"
+                className="flex flex-col items-center justify-center cursor-pointer"
+              >
+                <UploadCloud className="h-12 w-12 text-gray-400 mb-3" />
+                <span className="text-gray-600">Click to upload or drag and drop</span>
+                <span className="text-sm text-gray-500">PNG, JPG up to 10MB</span>
+              </label>
+            </div>
+
+            {imagePreview && (
+              <div className="relative aspect-video w-full">
+                <Image
+                  src={imagePreview}
+                  alt="Preview"
+                  fill
+                  className="object-contain rounded-lg"
+                  unoptimized
+                />
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Results Card */}
+      {result && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Analysis Results</h2>
+          <div className="space-y-4">
+            <div className="bg-secondary p-4 rounded-lg">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-lg font-medium">Primary Diagnosis:</span>
+                <span className="text-lg font-bold">{formatCondition(result.prediction)}</span>
+              </div>
+              <div className="space-y-2">
+                {result.allPredictions.map(({ label, probability }) => (
+                  <div key={label} className="flex justify-between items-center">
+                    <span>{formatCondition(label)}:</span>
+                    <span className="font-mono">{probability.toFixed(2)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
