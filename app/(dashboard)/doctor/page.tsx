@@ -74,8 +74,23 @@ export default function DoctorDashboardPage() {
       case 'moderate': return 'text-[#F59E0B]';
       case 'severe': return 'text-[#EF4444]';
       default: return 'text-gray-500';
-    }  };  return (
+    }
+  };
+
+  return (
     <div className="space-y-6">
+      {/* Welcome Section */}
+      <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
+            </h1>
+            <p className="text-gray-500">{currentDate}</p>
+          </div>
+        </div>
+      </Card>
+
       {/* Quick Actions Panel */}
       <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
         <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Actions</h3>

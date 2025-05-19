@@ -60,15 +60,18 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
-          </h1>
-          <p className="text-gray-500">{currentDate}</p>
+      <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              {greeting}, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
+            </h1>
+            <p className="text-gray-500">{currentDate}</p>
+          </div>
         </div>
-      </div>
-        {/* Metric Cards Grid - Simplified */}
+      </Card>
+
+      {/* Metric Cards Grid - Simplified */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {/* Total Users Card */}
         <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">

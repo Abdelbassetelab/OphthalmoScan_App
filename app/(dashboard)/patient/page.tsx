@@ -136,25 +136,28 @@ export default function PatientDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
-          </h1>
-          <p className="text-gray-500">{currentDate}</p>
-        </div>
-        {mockData.appointments.next && (
-          <div className="mt-4 md:mt-0 px-4 py-2 bg-blue-50 rounded-lg flex items-center">
-            <div className="w-3 h-3 rounded-full bg-[#0A84FF] mr-2"></div>
-            <span className="text-sm font-medium text-gray-700">Next Appointment: 
-              <span className="ml-1 text-[#0A84FF]">
-                {countdown.days}d {countdown.hours}h {countdown.minutes}m
-              </span>
-            </span>
+      <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              Welcome back, {user?.username || user?.firstName || user?.lastName || user?.emailAddresses?.[0]?.emailAddress?.split('@')[0] || ''}
+            </h1>
+            <p className="text-gray-500">{currentDate}</p>
           </div>
-        )}
-      </div>
-        {/* Quick Actions Panel - At the top for immediate access */}
+          {mockData.appointments.next && (
+            <div className="mt-4 md:mt-0 px-4 py-2 bg-blue-50 rounded-lg flex items-center">
+              <div className="w-3 h-3 rounded-full bg-[#0A84FF] mr-2"></div>
+              <span className="text-sm font-medium text-gray-700">Next Appointment: 
+                <span className="ml-1 text-[#0A84FF]">
+                  {countdown.days}d {countdown.hours}h {countdown.minutes}m
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Quick Actions Panel - At the top for immediate access */}
       <Card className="p-5 bg-white shadow-sm rounded-xl border-none hover:shadow-md transition-shadow duration-300">
         <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Actions</h3>
         
