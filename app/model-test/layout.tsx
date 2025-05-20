@@ -9,10 +9,11 @@ export default function ModelTestLayout({
   children,
 }: {
   children: React.ReactNode;
-}) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+}) {  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { isLoading, isAuthenticated, userRole } = useAuthContext();
 
+  // Comment out the authentication checks for testing
+  /*
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -33,6 +34,7 @@ export default function ModelTestLayout({
       </div>
     );
   }
+  */
 
   const toggleSidebar = () => {
     setSidebarCollapsed(!sidebarCollapsed);

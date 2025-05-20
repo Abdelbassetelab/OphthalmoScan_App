@@ -86,10 +86,9 @@ export default function UsersManagementPage() {
       setError(err instanceof Error ? err.message : 'Error updating user role');
     }
   }
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[70vh]">
         <div className="w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin"></div>
       </div>
     );
@@ -97,7 +96,7 @@ export default function UsersManagementPage() {
 
   if (error) {
     return (
-      <div className="p-4">
+      <div>
         <Card className="p-6 bg-red-50 border-red-200">
           <h2 className="text-lg font-semibold text-red-700">Error</h2>
           <p className="text-red-600">{error}</p>
@@ -106,7 +105,8 @@ export default function UsersManagementPage() {
     );
   }
   return (
-    <div className="p-6 space-y-6">      <div className="flex justify-between items-center">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">User Management</h1>
         <Button 
           onClick={() => setRefreshTrigger(prev => prev + 1)}

@@ -61,8 +61,7 @@ const utilityItems: MenuItem[] = [
 ];
 
 // Main navigation items (remove utility items from here)
-const menuItems: MenuItem[] = [
-  // Admin Routes
+const menuItems: MenuItem[] = [  // Admin Routes
   { 
     path: '/dashboard', 
     label: 'Dashboard', 
@@ -70,14 +69,14 @@ const menuItems: MenuItem[] = [
     roleAccess: ['admin', 'doctor', 'patient'] 
   },
   { 
-    path: '/admin', 
+    path: '/management', 
     label: 'Management', 
     icon: Shield, 
     roleAccess: ['admin'],
     children: [
-      { path: '/admin/users', label: 'User Management', icon: UserCog, roleAccess: ['admin'] },
-      { path: '/admin/doctors', label: 'Doctor Directory', icon: Stethoscope, roleAccess: ['admin'] },
-      { path: '/admin/reports', label: 'System Reports', icon: FileText, roleAccess: ['admin'] }
+      { path: '/management/users', label: 'User Management', icon: UserCog, roleAccess: ['admin'] },
+      { path: '/model-test', label: 'AI Model Testing', icon: Database, roleAccess: ['admin'] },
+      { path: '/scan-analysis', label: 'Scan Analysis', icon: Eye, roleAccess: ['admin'] }
     ]
   },
   {
