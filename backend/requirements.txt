@@ -5,3 +5,6 @@ pillow==9.5.0
 numpy
 gunicorn==20.1.0
 python-dotenv==1.0.0
+fastapi==0.104.1
+uvicorn==0.23.2
+python-multipart==0.0.6
