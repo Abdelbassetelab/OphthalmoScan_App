@@ -23,11 +23,13 @@ export interface LegacyPredictionResult {
 }
 
 export const predictEyeDisease = async (
-  image: File
+  image: File,
+  userId: string
 ): Promise<LegacyPredictionResult | null> => {
   try {
     const formData = new FormData();
     formData.append('file', image); // 'file' is the parameter name expected by FastAPI
+    formData.append('user_id', String(userId)); // Convert to string explicitly
 
     // Use our internal API route instead of directly accessing the FastAPI server
     const response = await fetch('/api/ai/predict', {
@@ -50,7 +52,7 @@ export const predictEyeDisease = async (
     console.error('Error predicting eye disease:', error);
     toast({
       title: 'Error',
-      description: error instanceof Error ? error.message : 'Failed to analyze image',
+      description: error instanceof Error ? error.message : 'An error occurred',
       variant: 'destructive',
     });
     return null;

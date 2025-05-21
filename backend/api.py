@@ -2,6 +2,12 @@ import os
 import numpy as np
 import logging
 import io
+import base64
+from datetime import datetime
+import uuid
+from typing import Optional, Dict, Any
+from dotenv import load_dotenv
+from supabase import create_client, Client
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
@@ -44,6 +50,23 @@ FALLBACK_PATHS = [
     os.path.join(os.path.dirname(__file__), '..', 'public', 'model', 'model.weights.h5'),
     os.path.join(os.path.dirname(__file__), 'model_weights.h5'),
 ]
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Initialize Supabase client
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+supabase: Optional[Client] = None
+
+if supabase_url and supabase_key:
+    try:
+        supabase = create_client(supabase_url, supabase_key)
+        logger.info("Supabase client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Supabase client: {str(e)}")
+else:
+    logger.warning("Supabase configuration missing. Check your .env file for SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY")
 
 def create_model():
     """Create and return the EfficientNetB3-based model architecture."""
@@ -150,10 +173,31 @@ async def health_check():
     }
 
 @app.post("/predict/")
-async def predict(file: UploadFile = File(...)):
-    """Handle image prediction requests."""
+async def predict(
+    file: UploadFile = File(...),
+    user_id: str
+):
+    """
+    Handle image prediction requests and save results to Supabase.
+    
+    Args:
+        file: The uploaded image file
+        user_id: Required user ID for authentication. Must not be anonymous.
+    """
+    if not user_id or user_id.lower() == 'anonymous':
+        raise HTTPException(status_code=401, detail="A valid user ID is required")
+        
+    logger.info(f"📥 Received prediction request for file: {file.filename}")
+    logger.info(f"👤 User ID: {user_id}")
+    logger.info(f"🔗 Supabase Status: {'Connected' if supabase else 'Not Connected'}")
+    
+    # Verify Supabase connection
+    if not supabase:
+        logger.warning("⚠️ Supabase client not initialized. Check environment variables:"
+                      f"\nSUPABASE_URL: {'Set' if os.getenv('SUPABASE_URL') else 'Not Set'}"
+                      f"\nSUPABASE_SERVICE_ROLE_KEY: {'Set' if os.getenv('SUPABASE_SERVICE_ROLE_KEY') else 'Not Set'}")
     try:
-        logger.info(f"Received prediction request for file: {file.filename}")
+        logger.info(f"Received prediction request for file: {file.filename} from user: {user_id}")
         
         # Check if model is loaded
         if model is None:
@@ -200,16 +244,30 @@ async def predict(file: UploadFile = File(...)):
         # Log detailed prediction values
         for class_name, prob in class_probabilities.items():
             logger.info(f"Prediction for {class_name}: {prob:.6f}")
-        
-        # Format results in the format expected by the frontend
+          # Format results in the format expected by the frontend
         results = {
             "predictions": class_probabilities,
             "top_prediction": predicted_class,
-            # Add the following for compatibility with both interfaces
-            "predicted_class": predicted_class,
             "confidence": confidence,
-            "class_probabilities": class_probabilities
+            "prediction_id": None,  # Will be filled by Supabase
+            "saved_at": None  # Will be filled by Supabase
         }
+        
+        # Convert image to base64 for storage
+        try:
+            buffered = io.BytesIO()
+            image.save(buffered, format="JPEG")
+            image_base64 = base64.b64encode(buffered.getvalue()).decode()
+            
+            # Save to Supabase and get updated results
+            results = save_prediction_to_supabase(
+                prediction_data=results,
+                image_base64=image_base64,
+                user_id=user_id
+            )
+        except Exception as e:
+            logger.error(f"Error preparing image for storage: {str(e)}")
+            # Continue without storage - predictions are still valid
         
         logger.info(f"Prediction successful. Predicted class: {predicted_class}")
         return results
@@ -223,6 +281,81 @@ async def predict(file: UploadFile = File(...)):
 async def legacy_predict(file: UploadFile = File(...)):
     """Legacy endpoint compatible with the previous API path."""
     return await predict(file)
+
+def save_prediction_to_supabase(
+    prediction_data: Dict[str, Any],
+    image_base64: Optional[str] = None,
+    user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Save prediction results to Supabase and return updated prediction data.
+    """
+    if not supabase:
+        logger.error("❌ Supabase client not configured")
+        return prediction_data
+    
+    try:
+        # Generate unique ID and timestamp
+        prediction_id = str(uuid.uuid4())
+        saved_at = datetime.utcnow().isoformat()
+        
+        logger.info(f"🔄 Preparing to save prediction {prediction_id} to Supabase")
+        logger.info(f"👤 User ID: {user_id}")
+        logger.info(f"📊 Prediction: {prediction_data['top_prediction']} ({prediction_data['confidence']:.2%})")
+        
+        # Prepare data for storage
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID is required")
+            
+        supabase_data = {
+            "id": prediction_id,
+            "user_id": user_id,  # No more fallback to "anonymous"
+            "created_at": saved_at,
+            "scan_type": "fundus",
+            "scan_date": saved_at,
+            "diagnosis": prediction_data["top_prediction"],
+            "confidence": float(prediction_data["confidence"]),
+            "diagnosis_date": saved_at,
+            "ai_generated": True,
+            "verified": False,
+            "metadata": {
+                "class_probabilities": prediction_data["predictions"],
+                "processing_info": "EfficientNetB3 model analysis",
+                "original_filename": "uploaded_scan.jpg"
+            }
+        }
+        
+        # Add image if provided
+        if image_base64:
+            supabase_data["image_url"] = f"data:image/jpeg;base64,{image_base64}"
+            logger.info("📸 Image data included in payload")
+        
+        logger.info("📤 Attempting to save to Supabase...")
+        
+        # Save to Supabase with error details
+        try:
+            result = supabase.table("predictions").insert(supabase_data).execute()
+            if not result.data:
+                raise Exception("No data returned from Supabase")
+            
+            logger.info(f"✅ Successfully saved prediction {prediction_id} to Supabase")
+            
+            # Update prediction data with storage info
+            prediction_data["prediction_id"] = prediction_id
+            prediction_data["saved_at"] = saved_at
+            return prediction_data
+            
+        except Exception as se:
+            logger.error(f"❌ Supabase insert error: {str(se)}")
+            if hasattr(se, 'message'):
+                logger.error(f"Error message: {se.message}")
+            raise
+        
+    except Exception as e:
+        logger.error(f"❌ Error in save_prediction_to_supabase: {str(e)}")
+        if hasattr(e, 'message'):
+            logger.error(f"Error message: {e.message}")
+        return prediction_data
 
 if __name__ == "__main__":
     logger.info("Starting OphthalmoScan AI FastAPI Server...")

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useUser } from "@clerk/nextjs";
 import Image from 'next/image';
 import { FileImage, UploadCloud, X, RefreshCw } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -15,6 +16,7 @@ interface AnalysisResult {
 }
 
 export default function ModelTestPage() {
+  const { user } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -61,6 +63,15 @@ export default function ModelTestPage() {
     }
   };  const analyzeSampleImage = async (imageName: string) => {
     try {
+      if (!user?.id) {
+        toast({
+          title: 'Authentication Error',
+          description: 'You must be logged in to analyze images',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       setIsAnalyzing(true);
       setResult(null);
       
@@ -82,8 +93,8 @@ export default function ModelTestPage() {
       };
       reader.readAsDataURL(file);
       
-      // Analyze the image
-      const predictionResult = await predictEyeDisease(file);
+      // Analyze the image with user ID
+      const predictionResult = await predictEyeDisease(file, user.id);
       
       if (!predictionResult) {
         throw new Error('Failed to analyze the image');
@@ -127,12 +138,21 @@ export default function ModelTestPage() {
       return;
     }
 
+    if (!user?.id) {
+      toast({
+        title: 'Authentication Error',
+        description: 'You must be logged in to analyze images',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setIsAnalyzing(true);
       setResult(null);
       
-      // Analyze the image
-      const predictionResult = await predictEyeDisease(file);
+      // Analyze the image with user ID
+      const predictionResult = await predictEyeDisease(file, user.id);
       
       if (!predictionResult) {
         throw new Error('Failed to analyze the image');
