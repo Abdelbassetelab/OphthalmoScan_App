@@ -130,7 +130,7 @@ def save_prediction_to_supabase(
         }
         
         if image_base64:
-            supabase_data["image_url"] = f"data:image/jpeg;base64,{image_base64}"
+            supabase_data["image_url"] = "data:image/jpeg;base64," + image_base64
         
         api_url = f"{supabase_url}/rest/v1/predictions"
         headers = {
@@ -209,17 +209,56 @@ async def predict(file: UploadFile = File(...), user_id: str = Form(...)):
         
         # Save to Supabase if possible
         try:
-            buffered = io.BytesIO()
-            image.save(buffered, format="JPEG")
-            image_base64 = base64.b64encode(buffered.getvalue()).decode()
+            # Validate and process image before converting to base64
+            try:
+                # Create a new BytesIO buffer for each request
+                with io.BytesIO(content) as input_buffer:
+                    # Open image and convert to RGB if needed
+                    img = Image.open(input_buffer)
+                    
+                    # Log original image details for debugging
+                    logger.info(f"Processing new image: {file.filename}")
+                    logger.info(f"Original image size: {img.size}, mode: {img.mode}, format: {img.format}")
+                    
+                    # Convert to RGB if necessary
+                    if img.mode in ('RGBA', 'P'):
+                        img = img.convert('RGB')
+                    
+                    # Resize if needed
+                    max_size = 1024
+                    if max(img.size) > max_size:
+                        ratio = max_size / max(img.size)
+                        new_size = tuple(int(dim * ratio) for dim in img.size)
+                        img = img.resize(new_size, Image.Resampling.LANCZOS)
+                    
+                    # Create a new buffer for the processed image
+                    with io.BytesIO() as output_buffer:
+                        # Save as JPEG with controlled quality
+                        img.save(output_buffer, format='JPEG', quality=85, optimize=True)
+                        # Get the binary data
+                        image_binary = output_buffer.getvalue()
+                        # Convert to base64
+                        image_base64 = base64.b64encode(image_binary).decode()
+                        
+                        # Log verification data
+                        logger.info(f"Processed image size: {len(image_binary)} bytes")
+                        logger.info(f"Base64 string length: {len(image_base64)} chars")
+                        logger.info(f"First 50 chars of base64: {image_base64[:50]}")
+                
+                if not image_base64:
+                    raise ValueError("Base64 conversion failed - empty string")
+                
+            except Exception as img_error:
+                logger.error(f"Error processing image {file.filename}: {str(img_error)}")
+                raise HTTPException(status_code=400, detail=f"Image processing failed: {str(img_error)}")
             
-            # Will raise HTTPException if user_id is missing or saving fails
+            # Save to Supabase
             results = save_prediction_to_supabase(
                 prediction_data=results,
                 image_base64=image_base64,
                 user_id=user_id
             )
-            logger.info(f"Prediction saved for user {user_id}")
+            logger.info(f"Prediction saved for user {user_id} with image of size {len(image_base64)} chars")
         except HTTPException as he:
             raise he
         except Exception as e:
