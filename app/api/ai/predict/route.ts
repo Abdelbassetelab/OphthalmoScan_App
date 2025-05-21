@@ -1,13 +1,44 @@
+import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
+
+interface PredictionResponse {
+  predictions?: Record<string, number>;
+  class_probabilities?: Record<string, number>;
+  top_prediction?: string;
+  predicted_class?: string;
+  confidence?: number;
+  prediction_id?: string;
+  saved_at?: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
+    // Get the user ID from Clerk
+    const { userId } = await auth();
+    if (!userId || userId.toLowerCase() === 'anonymous') {
+      return NextResponse.json(
+        { error: 'Unauthorized: Valid authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Get the original form data
+    const originalFormData = await request.formData();
+    const newFormData = new FormData();
+    
+    // Add user_id first (as required by FastAPI endpoint)
+    newFormData.append('user_id', String(userId));
+    
+    // Add the file
+    const file = originalFormData.get('file');
+    if (file) {
+      newFormData.append('file', file);
+    }
     
     // Forward the request to the FastAPI backend
     const apiResponse = await fetch('http://localhost:8000/predict/', {
       method: 'POST',
-      body: formData,
+      body: newFormData,
     });
     
     if (!apiResponse.ok) {
@@ -17,19 +48,22 @@ export async function POST(request: NextRequest) {
         { status: apiResponse.status }
       );
     }
-      const data = await apiResponse.json();
-      // Log the raw response for debugging
+
+    const data: PredictionResponse = await apiResponse.json();
     console.log('Raw FastAPI response:', data);
-    
-    // Convert the FastAPI response format to our application's format if needed
+
+    // Format response for frontend to maintain backward compatibility
     const formattedResponse = {
-      predictions: data.class_probabilities,
-      top_prediction: data.predicted_class
+      predictions: data.predictions || data.class_probabilities || {},
+      top_prediction: data.top_prediction || data.predicted_class || 'unknown',
+      confidence: data.confidence || 0,
+      prediction_id: data.prediction_id || undefined,
+      saved_at: data.saved_at || undefined
     };
     
     console.log('Formatted response:', formattedResponse);
-    
     return NextResponse.json(formattedResponse);
+
   } catch (error) {
     console.error('Error in API route:', error);
     return NextResponse.json(

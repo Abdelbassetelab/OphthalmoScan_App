@@ -24,7 +24,7 @@ from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 from supabase import create_client, Client
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import tensorflow as tf
@@ -106,35 +106,33 @@ def save_prediction_to_supabase(
     image_base64: Optional[str] = None,
     user_id: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Save prediction to Supabase using direct REST API calls to bypass SSL issues."""
+    """Save prediction to Supabase using direct REST API calls."""
     if not supabase_url or not supabase_key:
         logger.warning("⚠️ Supabase configuration missing, skipping storage")
         return prediction_data
     
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID is required")
+    
     try:
-        # Generate unique ID and timestamp
         prediction_id = str(uuid.uuid4())
         saved_at = datetime.utcnow().isoformat()
         
-        # Prepare data for storage
         supabase_data = {
-            "id": prediction_id,
+            "id": str(prediction_id),
+            "user_id": str(user_id),
             "created_at": saved_at,
-            "user_id": user_id or "anonymous",
-            "diagnosis": prediction_data["top_prediction"],
+            "diagnosis": str(prediction_data["top_prediction"]),
             "confidence": float(prediction_data["confidence"]),
             "metadata": {
                 "class_probabilities": prediction_data["predictions"]
             }
         }
         
-        # Add image if provided
         if image_base64:
             supabase_data["image_url"] = f"data:image/jpeg;base64,{image_base64}"
         
-        # Save to Supabase using direct REST API call
         api_url = f"{supabase_url}/rest/v1/predictions"
-        
         headers = {
             "apikey": supabase_key,
             "Authorization": f"Bearer {supabase_key}",
@@ -142,28 +140,23 @@ def save_prediction_to_supabase(
             "Prefer": "return=minimal"
         }
         
-        logger.info(f"Attempting to save prediction to Supabase via REST API...")
         response = requests.post(
             api_url,
             headers=headers,
             data=json.dumps(supabase_data),
-            verify=certifi.where()  # Use certifi for SSL verification
+            verify=certifi.where()
         )
         
-        # Check response
         if response.status_code in (200, 201):
-            logger.info(f"✅ Saved prediction {prediction_id} to Supabase (Status: {response.status_code})")
-            # Update prediction data with storage info
             prediction_data["prediction_id"] = prediction_id
             prediction_data["saved_at"] = saved_at
+            return prediction_data
         else:
-            logger.error(f"Error saving to Supabase: HTTP {response.status_code} - {response.text}")
-        
-        return prediction_data
+            raise HTTPException(status_code=500, detail="Failed to save prediction")
         
     except Exception as e:
         logger.error(f"Error saving to Supabase: {str(e)}")
-        return prediction_data
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Load model at startup
 try:
@@ -173,15 +166,16 @@ except Exception as e:
     model = None
 
 @app.post("/predict/")
-async def predict(file: UploadFile = File(...), user_id: Optional[str] = None):
+async def predict(file: UploadFile = File(...), user_id: str = Form(...)):
     """Handle image prediction requests."""
-    # Log the user_id parameter received
-    logger.info(f"Prediction request received with user_id: {user_id}")
-    
     try:
         if model is None:
             raise HTTPException(status_code=500, detail="Model not loaded")
-        
+            
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User ID is required")
+
+        # Validate file
         if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             raise HTTPException(status_code=400, detail="Invalid file type")
         
@@ -219,19 +213,28 @@ async def predict(file: UploadFile = File(...), user_id: Optional[str] = None):
             image.save(buffered, format="JPEG")
             image_base64 = base64.b64encode(buffered.getvalue()).decode()
             
+            # Will raise HTTPException if user_id is missing or saving fails
             results = save_prediction_to_supabase(
                 prediction_data=results,
                 image_base64=image_base64,
                 user_id=user_id
             )
+            logger.info(f"Prediction saved for user {user_id}")
+        except HTTPException as he:
+            raise he
         except Exception as e:
-            logger.error(f"Error saving to Supabase: {str(e)}")
+            error_msg = f"Error saving prediction: {str(e)}"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
         
         return results
         
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = f"Prediction error: {str(e)}"
+        logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
 
 if __name__ == "__main__":
     logger.info("🚀 Starting OphthalmoScan AI FastAPI Server...")
