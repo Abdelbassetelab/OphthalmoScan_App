@@ -3,156 +3,22 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Home, 
-  Users, 
-  FileImage, 
-  Activity, 
-  Settings, 
-  User, 
-  Eye,
-  BarChart,
-  Clipboard,
-  Calendar,
-  BookOpen,
-  Bell,
-  HelpCircle,
-  Shield,
-  FileText,
-  UserCog,
-  Database,
-  Stethoscope,
-  HeartPulse,
-  Clock,
-  MessageSquare,
-  UserPlus
-} from 'lucide-react';
-
-type MenuItem = {
-  path: string;
-  label: string;
-  icon: React.ElementType;
-  roleAccess: string[];
-  children?: MenuItem[];
-};
-
-// Separate utility navigation items
-const utilityItems: MenuItem[] = [
-  { 
-    path: '/scans', 
-    label: 'Scans', 
-    icon: FileImage, 
-    roleAccess: ['admin', 'doctor', 'patient'],
-  },
-  { 
-    path: '/settings', 
-    label: 'Settings', 
-    icon: Settings, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  },
-  { 
-    path: '/help', 
-    label: 'Help & Support', 
-    icon: HelpCircle, 
-    roleAccess: ['admin', 'doctor', 'patient']
-  }
-];
-
-// Main navigation items (remove utility items from here)
-const menuItems: MenuItem[] = [  // Admin Routes
-  { 
-    path: '/dashboard', 
-    label: 'Dashboard', 
-    icon: Home, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  },
-  { 
-    path: '/management', 
-    label: 'Management', 
-    icon: Shield, 
-    roleAccess: ['admin'],
-    children: [
-      { path: '/management/users', label: 'User Management', icon: UserCog, roleAccess: ['admin'] },
-      { path: '/model-test', label: 'AI Model Testing', icon: Database, roleAccess: ['admin'] },
-      { path: '/scan-analysis', label: 'Scan Analysis', icon: Eye, roleAccess: ['admin'] }
-    ]
-  },
-  {
-    path: '/analytics', 
-    label: 'Analytics', 
-    icon: BarChart, 
-    roleAccess: ['admin'],
-    children: [
-      { path: '/analytics/usage', label: 'System Usage', icon: Activity, roleAccess: ['admin'] },
-      { path: '/analytics/scans', label: 'Scan Statistics', icon: FileImage, roleAccess: ['admin'] }
-    ]
-  },
-
-  // Doctor Routes
-  { 
-    path: '/patients', 
-    label: 'Patient Management', 
-    icon: Users, 
-    roleAccess: ['doctor'],
-    children: [
-      { path: '/patients/list', label: 'Patient List', icon: Clipboard, roleAccess: ['doctor'] },
-      { path: '/patients/appointments', label: 'Appointments', icon: Calendar, roleAccess: ['doctor'] },
-      { path: '/patients/referrals', label: 'Referrals', icon: UserPlus, roleAccess: ['doctor'] }
-    ]
-  },
-  { 
-    path: '/diagnosis', 
-    label: 'Diagnosis', 
-    icon: HeartPulse, 
-    roleAccess: ['doctor'],
-    children: [
-      { path: '/diagnosis/new', label: 'New Diagnosis', icon: FileImage, roleAccess: ['doctor'] },
-      { path: '/diagnosis/history', label: 'History', icon: Clock, roleAccess: ['doctor'] }
-    ]
-  },
-
-  // Patient Routes
-  { 
-    path: '/my-health', 
-    label: 'My Health', 
-    icon: Activity, 
-    roleAccess: ['patient'],
-    children: [
-      { path: '/my-health/diagnoses', label: 'My Diagnoses', icon: FileText, roleAccess: ['patient'] },
-      { path: '/my-health/appointments', label: 'My Appointments', icon: Calendar, roleAccess: ['patient'] }
-    ]
-  },
-
-  // Common Routes
-  { 
-    path: '/messages', 
-    label: 'Messages', 
-    icon: MessageSquare, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  },
-  { 
-    path: '/notifications', 
-    label: 'Notifications', 
-    icon: Bell, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  },
-  { 
-    path: '/profile', 
-    label: 'Profile', 
-    icon: User, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  }
-].filter(item => !utilityItems.some(util => util.path === item.path));
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import useUserRole from '@/hooks/use-user-role';
+import { MenuItem, menuItemsByRole, utilityItemsByRole, commonMenuItems } from './sidebar-menu-items';
 
 interface CollapsibleSidebarProps {
-  userRole?: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
 }
 
-function NavItem({ item, isActive, collapsed, level = 0, isUtility = false }: { 
+function NavItem({ 
+  item, 
+  isActive, 
+  collapsed, 
+  level = 0, 
+  isUtility = false 
+}: { 
   item: MenuItem; 
   isActive: boolean; 
   collapsed: boolean;
@@ -162,22 +28,20 @@ function NavItem({ item, isActive, collapsed, level = 0, isUtility = false }: {
   const [isOpen, setIsOpen] = useState(false);
   const hasChildren = item.children && item.children.length > 0;
   const pathname = usePathname();
-
-  // Calculate padding based on nesting level
-  const paddingLeft = level * 1 + (collapsed ? 1 : 4);
-
+  
   return (
-    <div>
+    <div className="relative">
       <Link
-        href={item.path}
+        href={hasChildren ? '#' : item.path}
         className={`
           flex items-center py-2 transition-colors
           ${isActive 
-            ? 'bg-blue-50 text-blue-600 border-r-2 border-blue-600' 
+            ? `bg-${item.color?.replace('text-', '')?.replace('600', '50')} ${item.color} border-r-2 border-${item.color?.replace('text-', '')}` 
             : 'text-gray-600 hover:bg-gray-50'}
           ${hasChildren ? 'cursor-pointer' : ''}
-          ${level === 0 ? 'px-4' : `pl-${paddingLeft} pr-4`}
+          ${level === 0 ? 'px-4' : `pl-${level + (collapsed ? 1 : 4)} pr-4`}
           ${isUtility ? 'text-sm text-gray-500' : ''}
+          ${item.color && !isActive ? item.color : ''}
         `}
         onClick={(e) => {
           if (hasChildren) {
@@ -185,8 +49,10 @@ function NavItem({ item, isActive, collapsed, level = 0, isUtility = false }: {
             setIsOpen(!isOpen);
           }
         }}
+        title={item.label}
+        aria-label={item.label}
       >
-        <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-blue-600' : isUtility ? 'text-gray-400' : ''}`} />
+        <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? item.color : isUtility ? 'text-gray-400' : item.color || ''}`} />
         {!collapsed && (
           <>
             <span className="ml-3 flex-1 transition-opacity duration-200">{item.label}</span>
@@ -215,10 +81,10 @@ function NavItem({ item, isActive, collapsed, level = 0, isUtility = false }: {
 }
 
 export default function CollapsibleSidebar({ 
-  userRole = 'patient', 
   collapsed: externalCollapsed, 
   onToggleCollapse 
 }: CollapsibleSidebarProps) {
+  const { role, isLoading } = useUserRole();
   const [collapsed, setCollapsed] = useState(externalCollapsed || false);
   const pathname = usePathname();
 
@@ -237,24 +103,43 @@ export default function CollapsibleSidebar({
     }
   };
 
-  // Filter menu items based on user role
-  const filteredMenuItems = menuItems.filter(item => 
-    item.roleAccess.includes(userRole)
-  );
+  // Don't render anything while loading the role
+  if (isLoading) {
+    return (
+      <div className="h-screen bg-white border-r border-gray-200 w-64 animate-pulse">
+        <div className="p-4">
+          <div className="h-6 bg-gray-200 rounded w-32"></div>
+        </div>
+      </div>
+    );
+  }
 
-  const filteredUtilityItems = utilityItems.filter(item =>
-    item.roleAccess.includes(userRole)
-  );
+  // If no role is found, don't show any navigation
+  if (!role) {
+    return null;
+  }
+
+  const filteredMenuItems = menuItemsByRole[role] || [];
+  const filteredUtilityItems = utilityItemsByRole[role] || [];
+  const roleColor = 'text-teal-600';
+
+  // Add color to common menu items based on role
+  const coloredCommonItems = commonMenuItems.map(item => ({
+    ...item,
+    color: roleColor
+  }));
 
   return (
     <div 
-      className={`h-screen bg-white border-r border-border flex flex-col transition-all duration-300 ease-in-out ${
+      className={`h-screen bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out ${
         collapsed ? 'w-20' : 'w-64'
       }`}
     >
       <div className="p-4 flex items-center justify-between">
         {!collapsed && (
-          <h2 className="font-semibold text-xl text-gray-800">OphthalmoScan</h2>
+          <h2 className={`font-semibold text-xl ${roleColor}`}>
+            OphthalmoScan
+          </h2>
         )}
         <button
           onClick={handleToggleCollapse}
@@ -272,6 +157,20 @@ export default function CollapsibleSidebar({
             <NavItem
               key={item.path}
               item={item}
+              isActive={pathname === item.path || pathname.startsWith(`${item.path}/`)}
+              collapsed={collapsed}
+            />
+          ))}
+        </nav>
+      </div>
+
+      {/* Common items */}
+      <div className="border-t border-gray-200">
+        <nav className="mt-2 space-y-1">
+          {coloredCommonItems.map(item => (
+            <NavItem
+              key={item.path}
+              item={item}
               isActive={pathname === item.path}
               collapsed={collapsed}
             />
@@ -281,12 +180,12 @@ export default function CollapsibleSidebar({
 
       {/* Utility navigation - fixed at bottom */}
       <div className="flex-shrink-0 border-t border-gray-200">
-        <nav className="mt-2 space-y-1" aria-label="Utility navigation">
+        <nav className="mt-2 space-y-1 mb-2" aria-label="Utility navigation">
           {filteredUtilityItems.map(item => (
             <NavItem
               key={item.path}
               item={item}
-              isActive={pathname === item.path}
+              isActive={pathname === item.path || pathname.startsWith(`${item.path}/`)}
               collapsed={collapsed}
               isUtility={true}
             />
