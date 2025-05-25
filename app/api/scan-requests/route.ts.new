@@ -1,0 +1,56 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs';
+import { createServerClient } from '@/lib/db/supabase-server';
+
+export async function POST(request: NextRequest) {
+  try {
+    const { userId } = auth();
+
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+    
+    const supabase = createServerClient();
+    const data = await request.json();
+    
+    // Create the scan request
+    const { data: scanRequest, error } = await supabase
+      .from('scan_requests')
+      .insert([
+        {
+          patient_id: userId,
+          description: data.reason,
+          symptoms: data.symptoms,
+          priority: data.urgency,
+          status: 'pending'
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating scan request:', error);
+      return new NextResponse('Failed to create scan request', { status: 500 });
+    }
+
+    // Create a notification for admin/doctors about the new scan request
+    await supabase.from('notifications').insert([
+      {
+        type: 'NEW_SCAN_REQUEST',
+        user_id: userId,
+        title: 'New Scan Request',
+        message: `A new scan request has been submitted by patient ${userId}`,
+        metadata: {
+          scan_request_id: scanRequest.id,
+          priority: data.urgency
+        },
+        read: false,
+      },
+    ]);
+
+    return NextResponse.json(scanRequest);
+  } catch (error) {
+    console.error('Error in scan request creation:', error);
+    return new NextResponse('Internal Server Error', { status: 500 });
+  }
+}

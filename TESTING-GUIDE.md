@@ -79,7 +79,65 @@ To test the scan analysis functionality:
 3. The backend should process the image and return predictions
 4. Results should be displayed showing the predicted conditions and their probabilities
 
-### 6. Troubleshooting
+## Role-Based Navigation System
+
+The application now features a comprehensive role-based navigation system that displays different menu items based on the user's role (Patient, Doctor, Admin). This functionality is implemented in the `role-based-sidebar.tsx` component.
+
+### Navigation Structure
+
+The navigation structure is defined in the `application-links.md` document and follows these guidelines:
+
+#### Patient Role
+- Dashboard
+- Scans (with Upload and AI Analysis sub-options)
+- Scan Analysis
+- My Health (with Diagnoses and Appointments sub-options)
+- Model Testing
+- Settings
+- Help/Support
+- Common features (Profile, Messages, Notifications)
+
+#### Doctor Role
+- Dashboard
+- Scans
+- Scan Analysis
+- Patient Management (with Patient List, Appointments, and Referrals sub-options)
+- Diagnosis (with New Diagnosis and History sub-options)
+- Model Testing
+- Settings
+- Help/Support
+- Common features (Profile, Messages, Notifications)
+
+#### Admin Role
+- Dashboard
+- User Management
+- All Scans
+- Model Testing
+- Model Generation
+- System Settings
+- Analytics (with System Usage and Scan Statistics sub-options)
+- Help/Support
+- Common features (Profile, Messages, Notifications)
+
+### Testing the Role-Based Navigation
+
+1. **Role Switching (Development Only)**
+   - In development mode, use the Role Switcher at the bottom of the sidebar to test different roles
+   - Click between Patient, Doctor, and Admin roles to verify the correct menu items appear
+
+2. **Manual Testing of Links**
+   - For each role, verify that all links in the sidebar navigate to the correct pages
+   - Ensure that nested submenus properly expand and collapse
+
+3. **Access Control**
+   - Verify that users cannot access pages not designated for their role
+   - Example: A patient should be redirected if attempting to access `/management/users`
+
+4. **Unit Tests**
+   - Run the test suite with: `npm test -- role-based-sidebar`
+   - This will verify that the correct menu items are displayed for each role
+
+## Troubleshooting
 
 If you encounter issues:
 

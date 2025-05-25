@@ -211,6 +211,59 @@ export interface Database {
           user_agent?: string | null
         }
       }
+      scan_requests: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          patient_id: string
+          user_id: string
+          description: string
+          symptoms: string | null
+          medical_history: string | null
+          status: 'pending' | 'assigned' | 'scheduled' | 'completed' | 'cancelled'
+          priority: 'low' | 'medium' | 'high' | 'urgent'
+          assigned_doctor_id: string | null
+          completed_at: string | null
+          has_image: boolean
+          scan_id: string | null
+          image_url: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          patient_id: string
+          user_id: string
+          description: string
+          symptoms?: string | null
+          medical_history?: string | null
+          status?: 'pending' | 'assigned' | 'scheduled' | 'completed' | 'cancelled'
+          priority?: 'low' | 'medium' | 'high' | 'urgent'
+          assigned_doctor_id?: string | null
+          completed_at?: string | null
+          has_image?: boolean
+          scan_id?: string | null
+          image_url?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          patient_id?: string
+          user_id?: string
+          description?: string
+          symptoms?: string | null
+          medical_history?: string | null
+          status?: 'pending' | 'assigned' | 'scheduled' | 'completed' | 'cancelled'
+          priority?: 'low' | 'medium' | 'high' | 'urgent'
+          assigned_doctor_id?: string | null
+          completed_at?: string | null
+          has_image?: boolean
+          scan_id?: string | null
+          image_url?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never

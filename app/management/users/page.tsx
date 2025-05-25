@@ -28,8 +28,7 @@ export default function UsersManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
-  // Get Clerk user
+    // Get Clerk user
   const { user } = useUser();
   
   // Get Supabase client with Clerk auth
@@ -61,8 +60,7 @@ export default function UsersManagementPage() {
       }
     }
 
-    fetchUsers();
-  }, [user, refreshTrigger, supabase, isLoaded]);
+    fetchUsers();  }, [user, refreshTrigger, supabase, isLoaded]);
   
   async function updateUserRole(userId: string, newRole: string) {
     if (!supabase) {
@@ -85,8 +83,7 @@ export default function UsersManagementPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error updating user role');
     }
-  }
-  if (loading) {
+  }  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
         <div className="w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin"></div>
@@ -103,8 +100,7 @@ export default function UsersManagementPage() {
         </Card>
       </div>
     );
-  }
-  return (
+  }  return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">User Management</h1>

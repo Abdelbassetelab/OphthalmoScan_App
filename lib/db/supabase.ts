@@ -1,29 +1,16 @@
-import { createClient } from '@supabase/supabase-js';
-import { Database } from '@/types/database.types';
+import { createClientComponentClient, createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { type Database } from '@/types/database.types';
 
-// Environment variables are automatically exposed to the client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// Validate environment variables
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env file.');
+// Helper function to create a client-side Supabase client
+export function createClient() {
+  return createClientComponentClient<Database>();
 }
 
-// Create a singleton Supabase client
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-  global: {
-    // Add custom headers if needed
-    headers: {
-      'x-application-name': 'OphthalmoScan-AI',
-    },
-  },
-});
+// Helper function to create a server-side Supabase client (requires cookies)
+export async function createServerClient() {
+  const { cookies } = await import('next/headers');
+  return createServerComponentClient<Database>({ cookies });
+}
 
 // Helper to handle common errors in Supabase operations
 export async function handleSupabaseError<T>(

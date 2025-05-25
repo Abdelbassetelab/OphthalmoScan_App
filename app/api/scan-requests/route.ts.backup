@@ -1,0 +1,204 @@
+import { NextResponse } from 'next/server';
+import { auth, clerkClient } from '@clerk/nextjs';
+import { createClient } from '@supabase/supabase-js';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
+
+// Create a Supabase client with the service role key for admin operations
+// Service role key bypasses RLS policies
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!,
+  {
+    auth: {
+      persistSession: false, // Don't persist the session
+      autoRefreshToken: false, // Don't auto refresh the token
+    }
+  }
+);
+
+// Check database constraints
+async function checkDatabaseConstraints() {
+  try {
+    console.log('Checking database constraints...');
+    
+    // Try to get table info
+    const { data: tableInfo, error: tableError } = await supabase
+      .from('scan_requests')
+      .select('*')
+      .limit(1);
+    
+    if (tableError) {
+      console.error('Error checking table:', tableError);
+      return false;
+    }
+    
+    console.log('Table check successful');
+    return true;
+  } catch (error) {
+    console.error('Error checking database constraints:', error);
+    return false;
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const { userId } = auth();
+    
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }    
+    
+    const data = await request.json();
+    console.log('Received scan request data:', data);
+    console.log('Clerk userId:', userId);
+
+    // Check database constraints
+    await checkDatabaseConstraints();
+
+    // Validate required fields
+    if (!data.description) {
+      return new NextResponse('Description is required', { status: 400 });
+    }
+      // First attempt - try with minimal fields
+    const scanRequest = {
+      description: data.description,
+      symptoms: data.symptoms || null,
+      clerk_user_id: userId,
+      status: 'pending',
+      priority: data.priority || 'medium',
+    };
+    
+    // Try multiple approaches to insert the record
+    let result;
+    let insertError = null;
+    
+    // Approach 1: Try direct insert without patient_id
+    try {
+      result = await supabase
+        .from('scan_requests')
+        .insert([scanRequest])
+        .select();
+        
+      if (result.error) {
+        console.error('First attempt error:', result.error);
+        insertError = result.error;
+      } else {
+        console.log('First attempt succeeded');
+      }
+    } catch (err) {
+      console.error('Exception in first attempt:', err);
+      insertError = err;
+    }
+    
+    // Approach 2: Try with patient_id if first attempt failed
+    if (insertError) {
+      try {
+        result = await supabase
+          .from('scan_requests')
+          .insert([{
+            ...scanRequest,
+            patient_id: '00000000-0000-0000-0000-000000000000' // Placeholder UUID
+          }])
+          .select();
+          
+        if (result.error) {
+          console.error('Second attempt error:', result.error);
+          insertError = result.error;
+        } else {
+          console.log('Second attempt succeeded');
+          insertError = null;
+        }
+      } catch (err) {
+        console.error('Exception in second attempt:', err);
+        if (!insertError) insertError = err;
+      }
+    }
+    
+    // Approach 3: Try raw SQL insert if previous attempts failed
+    if (insertError) {
+      try {
+        // Escape single quotes in the description and symptoms
+        const escapedDescription = data.description?.replace(/'/g, "''") || '';
+        const escapedSymptoms = data.symptoms?.replace(/'/g, "''") || '';
+        const escapedUserId = userId.replace(/'/g, "''");
+        const escapedPriority = (data.priority || 'medium').replace(/'/g, "''");
+        
+        const { data: sqlResult, error: sqlError } = await supabase
+          .rpc('execute_sql', {
+            sql_query: `
+              INSERT INTO scan_requests (description, symptoms, clerk_user_id, patient_id, status, priority)
+              VALUES ('${escapedDescription}', 
+                     ${escapedSymptoms ? `'${escapedSymptoms}'` : 'NULL'}, 
+                     '${escapedUserId}', 
+                     '00000000-0000-0000-0000-000000000000', 
+                     'pending', 
+                     '${escapedPriority}')
+              RETURNING id, description, symptoms, clerk_user_id, status, priority;
+            `
+          });
+          
+        if (sqlError) {
+          console.error('SQL attempt error:', sqlError);
+          insertError = sqlError;
+        } else {
+          console.log('SQL attempt succeeded:', sqlResult);
+          result = { data: [sqlResult] };
+          insertError = null;
+        }
+      } catch (err) {
+        console.error('Exception in SQL attempt:', err);
+        if (!insertError) insertError = err;
+      }
+    }
+    
+    // If all attempts failed, return error
+    if (insertError) {
+      console.error('All insertion attempts failed');
+      return NextResponse.json({ 
+        message: 'Failed to create scan request after multiple attempts', 
+        error: insertError 
+      }, { status: 500 });
+    }
+    
+    return NextResponse.json(result.data?.[0] || scanRequest, { status: 201 });
+  } catch (error) {
+    console.error('Error in scan request route:', error);
+    // Return more detailed error information for debugging
+    if (error instanceof Error) {
+      return NextResponse.json({ message: 'Internal Server Error', error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const { userId } = auth();
+    
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+    
+    // Get all scan requests for the current user
+    const { data: scanRequests, error } = await supabase
+      .from('scan_requests')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('created_at', { ascending: false });
+      
+    if (error) {
+      console.error('Error fetching scan requests:', error);
+      return NextResponse.json({ message: 'Failed to fetch scan requests', error: error }, { status: 500 });
+    }
+
+    return NextResponse.json(scanRequests);
+  } catch (error) {
+    console.error('Error in scan request route:', error);
+    // Return more detailed error information for debugging
+    if (error instanceof Error) {
+      return NextResponse.json({ message: 'Internal Server Error', error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ message: 'Internal Server Error' }, { status: 500 });
+  }
+}

@@ -9,9 +9,9 @@ This document provides a comprehensive list of all the valid navigation links in
 - `/dashboard` - Central hub for all users
 
 ## Role-specific Dashboard Pages
-- `/dashboard/admin` - Administrative control center for oversight
-- `/dashboard/doctor` - Medical staff workflow management hub
-- `/dashboard/patient` - Patient health data access point
+- `/dashboard` - Administrative control center for oversight
+- `/dashboard` - Medical staff workflow management hub
+- `/dashboard` - Patient health data access point
 
 ## Scan Management
 - `/scans` - Browse and manage eye scan library
@@ -49,9 +49,9 @@ This document provides a comprehensive list of all the valid navigation links in
 - `/help/contact` - Reach support team for assistance
 
 ## Additional Features
-- `/model-test` - Evaluate AI diagnosis model performance
+- `/model-test` - Evaluate AI diagnosis model performance  ( doctor, admin, patient)
 - `/scan-analysis` - Advanced scan review and comparison
-- `/management` - System administration and configuration center
+- `/management` - System administration and configuration center 
 - `/management/users` - Manage user accounts and permissions
 
 *Last updated: May 20, 2025*

@@ -13,6 +13,12 @@ import {
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 
+type FormItemContextValue = {
+  id: string
+}
+
+const FormItemContext = React.createContext<FormItemContextValue>({} as FormItemContextValue)
+
 const Form = FormProvider
 
 type FormFieldContextValue<
@@ -62,13 +68,7 @@ const useFormField = () => {
   }
 }
 
-type FormItemContextValue = {
-  id: string
-}
 
-const FormItemContext = React.createContext<FormItemContextValue>(
-  {} as FormItemContextValue
-)
 
 const FormItem = React.forwardRef<
   HTMLDivElement,
@@ -118,7 +118,9 @@ const FormControl = React.forwardRef<
       }
       aria-invalid={!!error}
       {...props}
-    />
+    >
+      {props.children}
+    </Slot>
   )
 })
 FormControl.displayName = "FormControl"

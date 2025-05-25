@@ -1,0 +1,327 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useAuth, useUser } from '@clerk/nextjs';
+import { useRouter, useParams } from 'next/navigation';
+import { 
+  ArrowLeft, 
+  Calendar, 
+  Clock, 
+  User, 
+  FileText, 
+  AlertTriangle,
+  CheckCircle,
+  Stethoscope,
+  Eye,
+  Tag,
+  Info
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+
+// Types for scan request
+interface ScanRequest {
+  id: string;
+  patientName: string;
+  patientId: string;
+  doctorName?: string;
+  doctorId?: string;
+  requestDate: string;
+  status: 'pending' | 'assigned' | 'reviewed' | 'completed' | 'cancelled';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  notes?: string;
+  images?: { id: string; url: string; uploadedAt: string }[];
+}
+
+// Mock data for a scan request
+const mockScanRequests: Record<string, ScanRequest> = {
+  'req-001': {
+    id: 'req-001',
+    patientName: 'John Smith',
+    patientId: 'pat-123',
+    requestDate: '2025-05-20T09:30:00Z',
+    status: 'pending',
+    priority: 'medium',
+    notes: 'Regular checkup scan'
+  },
+  'req-002': {
+    id: 'req-002',
+    patientName: 'Sarah Johnson',
+    patientId: 'pat-456',
+    doctorName: 'Dr. Michael Brown',
+    doctorId: 'doc-789',
+    requestDate: '2025-05-21T14:15:00Z',
+    status: 'assigned',
+    priority: 'high',
+    notes: 'Follow-up after surgery',
+    images: [
+      { id: 'img-001', url: '/images/placeholder-scan.jpg', uploadedAt: '2025-05-21T14:30:00Z' }
+    ]
+  }
+};
+
+// Component for displaying scan request details
+const ScanRequestDetail = ({ 
+  scanRequest, 
+  userRole 
+}: { 
+  scanRequest: ScanRequest | null, 
+  userRole: string | null 
+}) => {
+  const router = useRouter();
+
+  if (!scanRequest) {
+    return (
+      <div className="text-center p-6 bg-white rounded-lg shadow">
+        <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-800 mb-2">Scan Request Not Found</h3>
+        <p className="text-gray-500 mb-4">The scan request you're looking for doesn't exist or you don't have permission to view it.</p>
+        <Button onClick={() => router.push('/scan-requests')}>
+          Back to Scan Requests
+        </Button>
+      </div>
+    );
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-xs font-medium">Pending</span>;
+      case 'assigned':
+        return <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">Assigned</span>;
+      case 'reviewed':
+        return <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-medium">Reviewed</span>;
+      case 'completed':
+        return <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">Completed</span>;
+      case 'cancelled':
+        return <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 text-xs font-medium">Cancelled</span>;
+      default:
+        return <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-xs font-medium">{status}</span>;
+    }
+  };
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'low':
+        return <span className="px-2 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">Low</span>;
+      case 'medium':
+        return <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium">Medium</span>;
+      case 'high':
+        return <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-medium">High</span>;
+      case 'urgent':
+        return <span className="px-2 py-1 rounded-full bg-red-100 text-red-800 text-xs font-medium">Urgent</span>;
+      default:
+        return <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-xs font-medium">{priority}</span>;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header with back button */}
+      <div className="flex items-center justify-between">
+        <Button 
+          variant="outline" 
+          onClick={() => router.push('/scan-requests')}
+          className="flex items-center"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Scan Requests
+        </Button>
+
+        {userRole === 'admin' && (
+          <Button 
+            variant="destructive"
+            size="sm"
+            className="flex items-center"
+          >
+            Cancel Request
+          </Button>
+        )}
+      </div>
+
+      {/* Request details card */}
+      <Card className="p-6">
+        <div className="flex flex-col md:flex-row justify-between border-b pb-4 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Scan Request: {scanRequest.id}</h1>
+            <div className="flex items-center space-x-4">
+              {getStatusBadge(scanRequest.status)}
+              {getPriorityBadge(scanRequest.priority)}
+            </div>
+          </div>
+          <div className="mt-4 md:mt-0">
+            <div className="flex items-center text-gray-500 mb-2">
+              <Calendar className="h-4 w-4 mr-2" />
+              <span>Requested: {formatDate(scanRequest.requestDate)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Patient Info */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-800 flex items-center">
+              <User className="h-5 w-5 mr-2 text-gray-500" />
+              Patient Information
+            </h3>
+            <div className="pl-7">
+              <p className="font-medium">{scanRequest.patientName}</p>
+              <p className="text-sm text-gray-500">ID: {scanRequest.patientId}</p>
+            </div>
+          </div>
+
+          {/* Doctor Info (if assigned) */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-800 flex items-center">
+              <Stethoscope className="h-5 w-5 mr-2 text-gray-500" />
+              Doctor Information
+            </h3>
+            <div className="pl-7">
+              {scanRequest.doctorName ? (
+                <>
+                  <p className="font-medium">{scanRequest.doctorName}</p>
+                  <p className="text-sm text-gray-500">ID: {scanRequest.doctorId}</p>
+                </>
+              ) : (
+                <p className="text-gray-500">Not assigned yet</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Notes Section */}
+        <div className="mt-6 pt-6 border-t">
+          <h3 className="text-lg font-medium text-gray-800 flex items-center mb-4">
+            <FileText className="h-5 w-5 mr-2 text-gray-500" />
+            Notes
+          </h3>
+          <div className="bg-gray-50 p-4 rounded-md">
+            <p className="text-gray-700">{scanRequest.notes || 'No notes provided'}</p>
+          </div>
+        </div>
+
+        {/* Uploaded Images (if any) */}
+        {scanRequest.images && scanRequest.images.length > 0 && (
+          <div className="mt-6 pt-6 border-t">
+            <h3 className="text-lg font-medium text-gray-800 flex items-center mb-4">
+              <Eye className="h-5 w-5 mr-2 text-gray-500" />
+              Uploaded Scans
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {scanRequest.images.map(image => (
+                <div key={image.id} className="border rounded-md overflow-hidden">
+                  <div className="aspect-w-16 aspect-h-9 bg-gray-100">
+                    <img 
+                      src={image.url} 
+                      alt="Scan" 
+                      className="object-cover w-full h-full"
+                      onError={(e) => {
+                        // Fallback for missing images
+                        e.currentTarget.src = 'https://via.placeholder.com/300x200?text=Scan+Image';
+                      }}
+                    />
+                  </div>
+                  <div className="p-2 text-xs text-gray-500">
+                    Uploaded: {new Date(image.uploadedAt).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="mt-6 pt-6 border-t flex flex-wrap gap-3 justify-end">
+          {userRole === 'doctor' && scanRequest.status === 'pending' && (
+            <Button className="bg-blue-600 hover:bg-blue-700">
+              Assign to Me
+            </Button>
+          )}
+          
+          {userRole === 'doctor' && scanRequest.status === 'assigned' && (
+            <Button className="bg-green-600 hover:bg-green-700">
+              Review Scan
+            </Button>
+          )}
+          
+          {userRole === 'patient' && scanRequest.status === 'pending' && (
+            <Button variant="destructive">
+              Cancel Request
+            </Button>
+          )}
+          
+          {userRole === 'admin' && (
+            <Button className="bg-purple-600 hover:bg-purple-700">
+              Reassign Request
+            </Button>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+export default function ScanRequestDetailPage() {
+  const { isSignedIn, isLoaded: isAuthLoaded } = useAuth();
+  const { user, isLoaded: isUserLoaded } = useUser();
+  const router = useRouter();
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
+  const params = useParams();
+  const id = params?.id as string;
+
+  useEffect(() => {
+    if (!isAuthLoaded || !isUserLoaded) return;
+
+    if (!isSignedIn) {
+      router.replace('/login');
+      return;
+    }
+
+    const role = user?.publicMetadata?.role as string || 'patient';
+    setUserRole(role);
+
+    // In a real application, you would fetch data from your API
+    // For now, we'll use our mock data
+    const fetchScanRequest = async () => {
+      try {
+        // Simulate API call delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const request = mockScanRequests[id];
+        setScanRequest(request || null);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching scan request:', error);
+        setIsLoading(false);
+      }
+    };
+
+    fetchScanRequest();
+  }, [isAuthLoaded, isUserLoaded, isSignedIn, user, router, id]);
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-t-4 border-blue-600 border-solid rounded-full animate-spin mb-4 mx-auto"></div>
+          <h2 className="text-xl font-medium text-gray-700">Loading scan request details</h2>
+        </div>
+      </div>
+    );
+  }
+
+  return <ScanRequestDetail scanRequest={scanRequest} userRole={userRole} />;
+}

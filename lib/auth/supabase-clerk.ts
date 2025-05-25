@@ -6,8 +6,6 @@ import { useEffect, useState } from 'react';
 // Creates a Supabase client with authentication from Clerk
 export function createClerkSupabaseClient() {
   return createClientComponentClient({
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     options: {
       global: {
         fetch: async (url, options = {}) => {

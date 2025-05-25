@@ -1,0 +1,87 @@
+import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs';
+import { createClient } from '@supabase/supabase-js';
+
+// Create a Supabase client with the service role key
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    }
+  }
+);
+
+export async function POST(request: Request) {
+  try {
+    const { userId } = auth();
+    
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+    
+    const data = await request.json();
+    console.log('Received data:', data);
+    console.log('Clerk userId:', userId);
+    
+    // Simplified version with only essential fields
+    const result = await supabase
+      .from('scan_requests')
+      .insert({
+        description: data.description,
+        clerk_user_id: userId,
+        status: 'pending'
+      })
+      .select()
+      .single();
+    
+    if (result.error) {
+      console.error('Error details:', result.error);
+      
+      // For debugging purposes, return the full error
+      return NextResponse.json({ 
+        message: 'Failed to create scan request',
+        error: result.error
+      }, { status: 500 });
+    }
+    
+    return NextResponse.json(result.data, { status: 201 });
+  } catch (error) {
+    console.error('Exception:', error);
+    return NextResponse.json({ 
+      message: 'Internal Server Error',
+      error: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const { userId } = auth();
+    
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+    
+    const { data, error } = await supabase
+      .from('scan_requests')
+      .select('*')
+      .eq('clerk_user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching scan requests:', error);
+      return NextResponse.json({ message: 'Failed to fetch scan requests', error }, { status: 500 });
+    }
+    
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('Exception:', error);
+    return NextResponse.json({ 
+      message: 'Internal Server Error',
+      error: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
+  }
+}
