@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useSupabaseWithClerk } from '@/lib/auth/supabase-clerk';
+import useUserRole from '@/hooks/use-user-role';
+import type { UserRole } from '@/lib/auth/clerk-auth';
+import { isPatient, isAdminOrDoctor } from '@/lib/auth/role-helpers';
 
 interface ScanRequest {
   id: string;
@@ -37,11 +40,12 @@ const ScanRequestsContent = ({
   loading,
   createScanRequest,
 }: { 
-  userRole: string | null;
+  userRole: UserRole | null;
   scanRequests: ScanRequest[];
   loading: boolean;
   createScanRequest: (data: CreateScanRequestData) => Promise<void>;
-}) => {  const [description, setDescription] = useState('');
+}) => {
+  const [description, setDescription] = useState('');
   const [symptoms, setSymptoms] = useState('');
   const [medicalHistory, setMedicalHistory] = useState('');  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -60,8 +64,15 @@ const ScanRequestsContent = ({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-8 md:space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Scan Requests</h1>
+      <div className="space-y-8 md:space-y-6">        <h1 className="text-2xl font-bold text-gray-900 mb-6">Scan Requests</h1>
+        
+        {isAdminOrDoctor(userRole) && (
+          <div className="mb-4">
+            <span className="px-2 py-1 rounded bg-blue-100 text-blue-800 text-sm font-medium">
+              Showing all scan requests in the system
+            </span>
+          </div>
+        )}
         
         {loading && (
           <div className="text-center py-4">
@@ -74,9 +85,7 @@ const ScanRequestsContent = ({
           <div className="text-center py-4">
             <p className="text-gray-600">No scan requests found</p>
           </div>
-        )}
-
-        {!loading && scanRequests.length > 0 && (
+        )}        {!loading && scanRequests.length > 0 && (
           <div className="space-y-4">
             {scanRequests.map((request) => (
               <div
@@ -200,7 +209,8 @@ export default function ScanRequestsPage() {
   const { user, isLoaded: isUserLoaded } = useUser();
   const router = useRouter();
   const { supabase, isLoaded: isSupabaseLoaded } = useSupabaseWithClerk();
-  const [userRole, setUserRole] = useState<string | null>(null);  const [isLoading, setIsLoading] = useState(true);
+  const { role, isLoading: isRoleLoading } = useUserRole();
+  const [isLoading, setIsLoading] = useState(true);
   const [scanRequests, setScanRequests] = useState<ScanRequest[]>([]);
 
   async function loadScanRequests() {
@@ -209,29 +219,40 @@ export default function ScanRequestsPage() {
       return;
     }
 
-    try {
+    try {      console.log(`Loading scan requests for user role: ${role}`);
       const query = supabase.from('scan_requests').select('*')
       
       // Filter based on user role
-      if (userRole === 'patient') {
+      // For main scan-requests page:
+      // - Patients see only their own requests
+      // - Doctors and admins see ALL requests in the system
+      if (isPatient(role)) {
         query.eq('patient_id', user?.id)
-      } else if (userRole === 'doctor') {
-        query.eq('assigned_doctor_id', user?.id)
+      } else if (isAdminOrDoctor(role)) {
+        // No filtering for admin and doctor roles - they see all requests
+        console.log(`User has ${role} role: showing all scan requests`);
+      } else {
+        // Default case: only show user's own requests
+        query.eq('patient_id', user?.id)
       }
-      // Admin can see all requests
       
-      const { data, error } = await query.order('created_at', { ascending: false })
+      // Add explicit limit to override any default limits
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(1000) // Set a high limit to make sure we get all records
       
       if (error) {
         console.error('Error fetching scan requests:', error);
         return;
       }
       
+      console.log(`Successfully fetched ${data?.length || 0} scan requests from database`);
       setScanRequests(data || []);
     } catch (error) {
       console.error('Error loading scan requests:', error)
     }
   }
+
   async function createScanRequest(data: CreateScanRequestData) {
     if (!supabase) {
       console.error('Supabase client not initialized');
@@ -263,15 +284,12 @@ export default function ScanRequestsPage() {
     }
   }
   useEffect(() => {
-    if (!isAuthLoaded || !isUserLoaded || !isSupabaseLoaded) return;
+    if (!isAuthLoaded || !isUserLoaded || !isSupabaseLoaded || isRoleLoading) return;
 
     if (!isSignedIn) {
       router.replace('/login');
       return;
     }
-
-    const role = user?.publicMetadata?.role as string || 'patient';
-    setUserRole(role);
     
     setIsLoading(true);
     const loadData = async () => {
@@ -279,18 +297,7 @@ export default function ScanRequestsPage() {
       setIsLoading(false);
     };
     loadData();
-  }, [isAuthLoaded, isUserLoaded, isSupabaseLoaded, isSignedIn, user, router]);
-
-  useEffect(() => {
-    if (userRole && supabase) {
-      setIsLoading(true);
-      const loadData = async () => {
-        await loadScanRequests();
-        setIsLoading(false);
-      };
-      loadData();
-    }
-  }, [userRole, supabase]);
+  }, [isAuthLoaded, isUserLoaded, isSupabaseLoaded, isRoleLoading, isSignedIn, user, router, role]);
 
   if (isLoading) {
     return (
@@ -302,10 +309,14 @@ export default function ScanRequestsPage() {
       </div>
     );
   }
+  
+  // Debug log - outside of JSX to avoid TypeScript issues
+  console.log(`Rendering ScanRequestsPage with ${scanRequests.length} scan requests, user role: ${role}`);
+  
   return (
     <div className="container mx-auto p-6">
       <ScanRequestsContent 
-        userRole={userRole}
+        userRole={role}
         scanRequests={scanRequests}
         loading={isLoading}
         createScanRequest={createScanRequest}

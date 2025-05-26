@@ -16,6 +16,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useSupabaseWithClerk } from '@/lib/auth/supabase-clerk';
 import { Database } from '@/types/database.types';
+import useUserRole from '@/hooks/use-user-role';
+import { isDoctor, isPatient } from '@/lib/auth/role-helpers';
+import type { UserRole } from '@/lib/auth/clerk-auth';
 
 // Types for scan requests based on Supabase schema
 type DbScanRequest = Database['public']['Tables']['scan_requests']['Row'];
@@ -26,7 +29,7 @@ interface ScanRequestWithDetails extends DbScanRequest {
   doctorName?: string;
 }
 
-const MyRequestsList = ({ userRole }: { userRole: string | null }) => {
+const MyRequestsList = ({ userRole }: { userRole: UserRole | null }) => {
   const [scanRequests, setScanRequests] = useState<DbScanRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -40,14 +43,16 @@ const MyRequestsList = ({ userRole }: { userRole: string | null }) => {
       
       try {
         setIsLoading(true);
-        
-        let query = supabase.from('scan_requests').select('*');
+          let query = supabase.from('scan_requests').select('*');
         
         // Filter requests based on user role
-        if (userRole === 'doctor') {
+        // On the "My Requests" page:
+        // - Doctors see only requests assigned to them
+        // - Patients see only their own requests
+        if (isDoctor(userRole)) {
           // For doctors, show requests assigned to them
           query = query.eq('assigned_doctor_id', user.id);
-        } else {
+        } else if (isPatient(userRole)) {
           // For patients, show their own requests
           query = query.eq('patient_id', user.id);
         }
@@ -185,8 +190,7 @@ const MyRequestsList = ({ userRole }: { userRole: string | null }) => {
                         <Eye className="h-3 w-3 mr-1" />
                         View
                       </Button>
-                      
-                      {userRole === 'doctor' && request.status === 'assigned' && (
+                        {isDoctor(userRole) && request.status === 'assigned' && (
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -197,7 +201,7 @@ const MyRequestsList = ({ userRole }: { userRole: string | null }) => {
                         </Button>
                       )}
                       
-                      {userRole === 'patient' && request.status === 'pending' && (
+                      {isPatient(userRole) && request.status === 'pending' && (
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -223,23 +227,21 @@ const MyRequestsPage = () => {
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { user, isLoaded: isUserLoaded } = useUser();
   const router = useRouter();
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const { role, isLoading: isRoleLoading } = useUserRole();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAuthLoaded || !isUserLoaded) return;
+    if (!isAuthLoaded || !isUserLoaded || isRoleLoading) return;
 
     if (!isSignedIn) {
       router.replace('/sign-in');
       return;
     }
 
-    const role = user?.publicMetadata?.role as string || 'patient';
-    setUserRole(role);
     setIsLoading(false);
-  }, [isAuthLoaded, isUserLoaded, isSignedIn, user, router]);
+  }, [isAuthLoaded, isUserLoaded, isRoleLoading, isSignedIn, router]);
 
-  if (isLoading) {
+  if (isLoading || isRoleLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
         <div className="text-center">
@@ -254,14 +256,14 @@ const MyRequestsPage = () => {
       <div className="space-y-8 md:space-y-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">My Scan Requests</h1>
-          {userRole === 'patient' && (
+          {isPatient(role) && (
             <Button onClick={() => router.push('/scan-requests/new')} className="flex items-center">
               <Plus className="h-4 w-4 mr-2" />
               New Scan Request
             </Button>
           )}
         </div>
-        <MyRequestsList userRole={userRole} />
+        <MyRequestsList userRole={role} />
       </div>
     </div>
   );

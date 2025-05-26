@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import useUserRole from '@/hooks/use-user-role';
+import type { UserRole } from '@/lib/auth/clerk-auth';
+import { isAdmin, isDoctor, isPatient, isAdminOrDoctor } from '@/lib/auth/role-helpers';
 
 // Types for scan request
 interface ScanRequest {
@@ -66,7 +69,7 @@ const ScanRequestDetail = ({
   userRole 
 }: { 
   scanRequest: ScanRequest | null, 
-  userRole: string | null 
+  userRole: UserRole | null 
 }) => {
   const router = useRouter();
 
@@ -242,26 +245,25 @@ const ScanRequestDetail = ({
         )}
 
         {/* Action Buttons */}
-        <div className="mt-6 pt-6 border-t flex flex-wrap gap-3 justify-end">
-          {userRole === 'doctor' && scanRequest.status === 'pending' && (
+        <div className="mt-6 pt-6 border-t flex flex-wrap gap-3 justify-end">          {isDoctor(userRole) && scanRequest.status === 'pending' && (
             <Button className="bg-blue-600 hover:bg-blue-700">
               Assign to Me
             </Button>
           )}
           
-          {userRole === 'doctor' && scanRequest.status === 'assigned' && (
+          {isDoctor(userRole) && scanRequest.status === 'assigned' && (
             <Button className="bg-green-600 hover:bg-green-700">
               Review Scan
             </Button>
           )}
           
-          {userRole === 'patient' && scanRequest.status === 'pending' && (
+          {isPatient(userRole) && scanRequest.status === 'pending' && (
             <Button variant="destructive">
               Cancel Request
             </Button>
           )}
           
-          {userRole === 'admin' && (
+          {isAdmin(userRole) && (
             <Button className="bg-purple-600 hover:bg-purple-700">
               Reassign Request
             </Button>
@@ -276,22 +278,19 @@ export default function ScanRequestDetailPage() {
   const { isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { user, isLoaded: isUserLoaded } = useUser();
   const router = useRouter();
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const { role, isLoading: isRoleLoading } = useUserRole();
   const [isLoading, setIsLoading] = useState(true);
   const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
   const params = useParams();
   const id = params?.id as string;
 
   useEffect(() => {
-    if (!isAuthLoaded || !isUserLoaded) return;
+    if (!isAuthLoaded || !isUserLoaded || isRoleLoading) return;
 
     if (!isSignedIn) {
       router.replace('/login');
       return;
     }
-
-    const role = user?.publicMetadata?.role as string || 'patient';
-    setUserRole(role);
 
     // In a real application, you would fetch data from your API
     // For now, we'll use our mock data
@@ -310,9 +309,9 @@ export default function ScanRequestDetailPage() {
     };
 
     fetchScanRequest();
-  }, [isAuthLoaded, isUserLoaded, isSignedIn, user, router, id]);
+  }, [isAuthLoaded, isUserLoaded, isRoleLoading, isSignedIn, user, router, id]);
 
-  if (isLoading) {
+  if (isLoading || isRoleLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
         <div className="text-center">
@@ -323,5 +322,5 @@ export default function ScanRequestDetailPage() {
     );
   }
 
-  return <ScanRequestDetail scanRequest={scanRequest} userRole={userRole} />;
+  return <ScanRequestDetail scanRequest={scanRequest} userRole={role} />;
 }
