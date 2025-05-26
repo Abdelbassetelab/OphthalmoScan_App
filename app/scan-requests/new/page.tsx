@@ -108,6 +108,11 @@ export default function NewScanRequestPage() {
         title: 'Submitting Request',
         description: 'Please wait while we process your request...',
       });
+        // Get the username from Clerk user object
+      const patientUsername = user.username || 
+        (user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : 'Unknown User');
+      
+      console.log('Using patient_username:', patientUsername);
       
       const { data: scanRequest, error } = await supabase
         .from('scan_requests')
@@ -121,6 +126,7 @@ export default function NewScanRequestPage() {
             has_image: data.has_image,
             image_url: data.image_url || null,
             status: 'pending',
+            patient_username: patientUsername, // Add the patient_username field
           }
         ])
         .select()

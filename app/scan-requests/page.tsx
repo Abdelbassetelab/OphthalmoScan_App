@@ -30,6 +30,8 @@ interface ScanRequest {
   status: 'pending' | 'assigned' | 'scheduled' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assigned_doctor_id: string | null;
+  assigned_doctor_username: string | null;
+  patient_username: string | null;
   completed_at: string | null;
   has_image: boolean;
   scan_id: string | null;
@@ -51,22 +53,26 @@ const ScanRequestsContent = ({
   scanRequests,
   loading,
   isRejecting,
+  isApproving,
   createScanRequest,
   rejectScanRequest,
+  approveScanRequest,
 }: { 
   userRole: UserRole | null;
   scanRequests: ScanRequest[];
   loading: boolean;
   isRejecting: boolean;
+  isApproving: boolean;
   createScanRequest: (data: CreateScanRequestData) => Promise<void>;
   rejectScanRequest: (requestId: string) => Promise<void>;
+  approveScanRequest: (requestId: string) => Promise<void>;
 }) => {
   const router = useRouter();
   const [description, setDescription] = useState('');
   const [symptoms, setSymptoms] = useState('');
-  const [medicalHistory, setMedicalHistory] = useState('');  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const [medicalHistory, setMedicalHistory] = useState('');  const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    console.log('Submitting scan request...');
     await createScanRequest({ 
       description, 
       symptoms: symptoms || null, 
@@ -126,12 +132,12 @@ const ScanRequestsContent = ({
                         </svg>
                       </div>
                     </div>
-                    
-                    {/* Patient details */}
-                    <div className="space-y-1">
-                      <h3 className="font-medium text-gray-900">
+                      {/* Patient details */}
+                    <div className="space-y-1">                      <h3 className="font-medium text-gray-900">
                         {request.patientName ? (
                           <span>{request.patientName}</span>
+                        ) : request.patient_username ? (
+                          <span>{request.patient_username}</span>
                         ) : (
                           <span>Patient #{request.patient_id.substring(0, 8)}</span>
                         )}
@@ -207,16 +213,16 @@ const ScanRequestsContent = ({
                         {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                       </span>
                     </div>
-                    
-                    {/* Doctor info if assigned */}
+                      {/* Doctor info if assigned */}
                     {request.assigned_doctor_id && (
-                      <div className="text-xs text-gray-600 flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 mr-1">
+                      <div className="text-xs text-gray-600 flex items-center">                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 mr-1">
                           <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"></path>
                           <path d="m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"></path>
                           <path d="M12 3v6"></path>
                         </svg>
-                        {request.doctorName ? request.doctorName : `Doctor #${request.assigned_doctor_id.substring(0, 8)}`}
+                        {request.doctorName ? request.doctorName : 
+                          request.assigned_doctor_username ? request.assigned_doctor_username : 
+                          `Doctor #${request.assigned_doctor_id?.substring(0, 8)}`}
                       </div>
                     )}
                     
@@ -232,15 +238,32 @@ const ScanRequestsContent = ({
                         </svg>
                         View Details
                       </button>
-                      
-                      {isAdminOrDoctor(userRole) && request.status === 'pending' && (
-                        <button className="px-3 py-1.5 bg-green-50 border border-green-200 rounded-md text-xs font-medium text-green-700 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 mr-1.5">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                          </svg>
-                          Approve
+                        {isAdminOrDoctor(userRole) && request.status === 'pending' && (
+                        <button 
+                          onClick={() => approveScanRequest(request.id)}
+                          disabled={isApproving}
+                          className={`px-3 py-1.5 bg-green-50 border border-green-200 rounded-md text-xs font-medium text-green-700 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors flex items-center ${
+                            isApproving ? 'opacity-70 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          {isApproving ? (
+                            <>
+                              <svg className="animate-spin h-3.5 w-3.5 mr-1.5 text-green-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Approving...
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 mr-1.5">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                              </svg>
+                              Approve
+                            </>
+                          )}
                         </button>
-                      )}                      {/* Reject button - allows users to delete their scan requests */}
+                      )}{/* Reject button - allows users to delete their scan requests */}
                       {(isAdminOrDoctor(userRole) || isPatient(userRole)) && request.status === 'pending' && (
                         <button 
                           onClick={() => rejectScanRequest(request.id)}
@@ -390,6 +413,7 @@ export default function ScanRequestsPage() {
   const { role, isLoading: isRoleLoading } = useUserRole();
   const [isLoading, setIsLoading] = useState(true);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [scanRequests, setScanRequests] = useState<ScanRequest[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [requestToReject, setRequestToReject] = useState<string | null>(null);
@@ -434,30 +458,47 @@ export default function ScanRequestsPage() {
       console.error('Error loading scan requests:', error)
     }
   }
-
   async function createScanRequest(data: CreateScanRequestData) {
     if (!supabase) {
       console.error('Supabase client not initialized');
       return;
     }
-
-    try {      const newRequest = {
+    try {
+      // Debug information about the user
+      console.log('Creating scan request with user info:', {
+        userId: user?.id,
+        username: user?.username,
+        firstName: user?.firstName,
+        lastName: user?.lastName
+      });
+      
+      // Make sure we have a valid username - if not, fall back to first+last name or "Unknown User"
+      const patientUsername = user?.username || 
+        (user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : 'Unknown User');
+      
+      console.log('Using patient_username:', patientUsername);
+      
+      const newRequest = {
         ...data,
         status: 'pending',
         priority: data.priority || 'medium',
         patient_id: user?.id,
+        patient_username: patientUsername,
         has_image: false, // Default to false, will be updated when image is added
         image_url: null // Will be set when an image is uploaded
-      }
+      };      console.log('Saving scan request with data:', JSON.stringify(newRequest, null, 2));
 
-      const { error } = await supabase
+      const { data: insertedData, error } = await supabase
         .from('scan_requests')
         .insert([newRequest])
+        .select();
 
       if (error) {
         console.error('Error creating scan request:', error);
         return;
       }
+
+      console.log('Successfully inserted scan request, response:', insertedData);
 
       // Reload the scan requests
       await loadScanRequests();
@@ -516,6 +557,55 @@ export default function ScanRequestsPage() {
     }
   }
 
+  async function approveScanRequest(requestId: string) {
+    if (!supabase || !user) {
+      return;
+    }
+
+    try {
+      setIsApproving(true);
+
+      // Update the scan request with doctor's ID and change status to 'assigned'
+      const { error } = await supabase
+        .from('scan_requests')
+        .update({
+          assigned_doctor_id: user.id,
+          assigned_doctor_username: user.username || user.firstName + ' ' + user.lastName,
+          status: 'assigned'
+        })
+        .eq('id', requestId);
+
+      if (error) {
+        console.error('Error approving scan request:', error);
+        toast({
+          title: "Error approving scan request",
+          description: "The request could not be approved. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Show success toast
+      toast({
+        title: "Scan request approved",
+        description: "The scan request has been assigned to you successfully.",
+        variant: "default",
+      });
+
+      // Reload the scan requests to update the UI
+      await loadScanRequests();
+    } catch (error) {
+      console.error('Error approving scan request:', error);
+      toast({
+        title: "An unexpected error occurred",
+        description: "Please try again or contact support if the problem persists.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApproving(false);
+    }
+  }
+
   useEffect(() => {
     if (!isAuthLoaded || !isUserLoaded || !isSupabaseLoaded || isRoleLoading) return;
 
@@ -551,8 +641,10 @@ export default function ScanRequestsPage() {
         scanRequests={scanRequests}
         loading={isLoading}
         isRejecting={isRejecting}
+        isApproving={isApproving}
         createScanRequest={createScanRequest}
         rejectScanRequest={rejectScanRequest}
+        approveScanRequest={approveScanRequest}
       />
 
       {/* Rejection Confirmation Dialog */}
