@@ -18,68 +18,50 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
 import useUserRole from '@/hooks/use-user-role';
 import type { UserRole } from '@/lib/auth/clerk-auth';
 import { isAdmin, isDoctor, isPatient, isAdminOrDoctor } from '@/lib/auth/role-helpers';
+import { useSupabaseWithClerk } from '@/lib/auth/supabase-clerk';
+import { Database } from '@/types/database.types';
 
 // Types for scan request
-interface ScanRequest {
-  id: string;
-  patientName: string;
-  patientId: string;
+type DbScanRequest = Database['public']['Tables']['scan_requests']['Row'];
+
+interface ScanRequest extends DbScanRequest {
+  patientName?: string;
   doctorName?: string;
-  doctorId?: string;
-  requestDate: string;
-  status: 'pending' | 'assigned' | 'reviewed' | 'completed' | 'cancelled';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  requestDate?: string;
   notes?: string;
+  doctorId?: string;
+  patientId?: string;
   images?: { id: string; url: string; uploadedAt: string }[];
 }
-
-// Mock data for a scan request
-const mockScanRequests: Record<string, ScanRequest> = {
-  'req-001': {
-    id: 'req-001',
-    patientName: 'John Smith',
-    patientId: 'pat-123',
-    requestDate: '2025-05-20T09:30:00Z',
-    status: 'pending',
-    priority: 'medium',
-    notes: 'Regular checkup scan'
-  },
-  'req-002': {
-    id: 'req-002',
-    patientName: 'Sarah Johnson',
-    patientId: 'pat-456',
-    doctorName: 'Dr. Michael Brown',
-    doctorId: 'doc-789',
-    requestDate: '2025-05-21T14:15:00Z',
-    status: 'assigned',
-    priority: 'high',
-    notes: 'Follow-up after surgery',
-    images: [
-      { id: 'img-001', url: '/images/placeholder-scan.jpg', uploadedAt: '2025-05-21T14:30:00Z' }
-    ]
-  }
-};
 
 // Component for displaying scan request details
 const ScanRequestDetail = ({ 
   scanRequest, 
-  userRole 
+  userRole,
+  onAssignToMe,
+  isAssigning
 }: { 
   scanRequest: ScanRequest | null, 
-  userRole: UserRole | null 
+  userRole: UserRole | null,
+  onAssignToMe: () => Promise<void>,
+  isAssigning: boolean
 }) => {
   const router = useRouter();
 
+  const handleAssignToMe = async () => {
+    await onAssignToMe();
+  };
+
   if (!scanRequest) {
     return (
-      <div className="text-center p-6 bg-white rounded-lg shadow">
-        <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+      <div className="text-center p-6 bg-white rounded-lg shadow">        <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-800 mb-2">Scan Request Not Found</h3>
         <p className="text-gray-500 mb-4">The scan request you're looking for doesn't exist or you don't have permission to view it.</p>
-        <Button onClick={() => router.push('/scan-requests')}>
+        <Button onClick={() => router.push('/scan-requests/my-requests')}>
           Back to Scan Requests
         </Button>
       </div>
@@ -132,10 +114,9 @@ const ScanRequestDetail = ({
   return (
     <div className="space-y-6">
       {/* Header with back button */}
-      <div className="flex items-center justify-between">
-        <Button 
+      <div className="flex items-center justify-between">        <Button 
           variant="outline" 
-          onClick={() => router.push('/scan-requests')}
+          onClick={() => router.push('/scan-requests/my-requests')}
           className="flex items-center"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -166,7 +147,7 @@ const ScanRequestDetail = ({
           <div className="mt-4 md:mt-0">
             <div className="flex items-center text-gray-500 mb-2">
               <Calendar className="h-4 w-4 mr-2" />
-              <span>Requested: {formatDate(scanRequest.requestDate)}</span>
+              <span>Requested: {formatDate(scanRequest.requestDate || scanRequest.created_at)}</span>
             </div>
           </div>
         </div>
@@ -176,11 +157,10 @@ const ScanRequestDetail = ({
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-800 flex items-center">
               <User className="h-5 w-5 mr-2 text-gray-500" />
-              Patient Information
-            </h3>
+              Patient Information            </h3>
             <div className="pl-7">
-              <p className="font-medium">{scanRequest.patientName}</p>
-              <p className="text-sm text-gray-500">ID: {scanRequest.patientId}</p>
+              <p className="font-medium">{scanRequest.patientName || `Patient ${scanRequest.patient_id?.substring(0, 8)}`}</p>
+              <p className="text-sm text-gray-500">ID: {scanRequest.patientId || scanRequest.patient_id}</p>
             </div>
           </div>
 
@@ -191,10 +171,10 @@ const ScanRequestDetail = ({
               Doctor Information
             </h3>
             <div className="pl-7">
-              {scanRequest.doctorName ? (
+              {scanRequest.doctorName || scanRequest.assigned_doctor_id ? (
                 <>
-                  <p className="font-medium">{scanRequest.doctorName}</p>
-                  <p className="text-sm text-gray-500">ID: {scanRequest.doctorId}</p>
+                  <p className="font-medium">{scanRequest.doctorName || `Doctor ${scanRequest.assigned_doctor_id?.substring(0, 8)}`}</p>
+                  <p className="text-sm text-gray-500">ID: {scanRequest.doctorId || scanRequest.assigned_doctor_id}</p>
                 </>
               ) : (
                 <p className="text-gray-500">Not assigned yet</p>
@@ -246,8 +226,12 @@ const ScanRequestDetail = ({
 
         {/* Action Buttons */}
         <div className="mt-6 pt-6 border-t flex flex-wrap gap-3 justify-end">          {isDoctor(userRole) && scanRequest.status === 'pending' && (
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              Assign to Me
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleAssignToMe}
+              disabled={isAssigning}
+            >
+              {isAssigning ? 'Assigning...' : 'Assign to Me'}
             </Button>
           )}
           
@@ -279,38 +263,104 @@ export default function ScanRequestDetailPage() {
   const { user, isLoaded: isUserLoaded } = useUser();
   const router = useRouter();
   const { role, isLoading: isRoleLoading } = useUserRole();
+  const { supabase, isLoaded: isSupabaseLoaded } = useSupabaseWithClerk();
   const [isLoading, setIsLoading] = useState(true);
+  const [isAssigning, setIsAssigning] = useState(false);
   const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
   const params = useParams();
   const id = params?.id as string;
+  const { toast } = useToast();
+
+  const fetchScanRequest = async () => {
+    try {
+      if (!supabase) return;
+      
+      // Get scan request by ID
+      const { data, error } = await supabase
+        .from('scan_requests')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching scan request:', error);
+        setScanRequest(null);
+      } else if (data) {
+        // Convert the Supabase data to our ScanRequest format
+        const scanRequestData: ScanRequest = {
+          ...data,
+          requestDate: data.created_at,
+          notes: data.symptoms || data.medical_history || 'No additional notes available'
+        };
+        
+        setScanRequest(scanRequestData);
+      } else {
+        setScanRequest(null);
+      }
+    } catch (error) {
+      console.error('Error fetching scan request:', error);
+      setScanRequest(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!isAuthLoaded || !isUserLoaded || isRoleLoading) return;
+    if (!isAuthLoaded || !isUserLoaded || isRoleLoading || !isSupabaseLoaded || !supabase) return;
 
     if (!isSignedIn) {
-      router.replace('/login');
+      router.replace('/sign-in');
       return;
     }
 
-    // In a real application, you would fetch data from your API
-    // For now, we'll use our mock data
-    const fetchScanRequest = async () => {
-      try {
-        // Simulate API call delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const request = mockScanRequests[id];
-        setScanRequest(request || null);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching scan request:', error);
-        setIsLoading(false);
-      }
-    };
-
     fetchScanRequest();
-  }, [isAuthLoaded, isUserLoaded, isRoleLoading, isSignedIn, user, router, id]);
-
+  }, [isAuthLoaded, isUserLoaded, isRoleLoading, isSignedIn, user, router, id, supabase, isSupabaseLoaded]);
+  const handleAssignToMe = async () => {
+    if (!supabase || !user || !scanRequest) return;
+    
+    try {
+      setIsAssigning(true);
+      
+      // Update the scan request with doctor's ID and change status to 'assigned'
+      const { error } = await supabase
+        .from('scan_requests')
+        .update({
+          assigned_doctor_id: user.id,
+          assigned_doctor_username: user.username || user.firstName + ' ' + user.lastName,  // Add username
+          status: 'assigned'
+        })
+        .eq('id', id);
+      
+      if (error) {
+        console.error('Error assigning scan request:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to assign scan request',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Refresh the scan request data
+      await fetchScanRequest();
+      
+      // Show success message
+      toast({
+        title: 'Success',
+        description: 'Scan request assigned to you successfully',
+      });
+      
+    } catch (error) {
+      console.error('Error assigning scan request:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to assign scan request',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAssigning(false);
+    }
+  };
   if (isLoading || isRoleLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
@@ -321,6 +371,10 @@ export default function ScanRequestDetailPage() {
       </div>
     );
   }
-
-  return <ScanRequestDetail scanRequest={scanRequest} userRole={role} />;
+  return <ScanRequestDetail 
+    scanRequest={scanRequest} 
+    userRole={role} 
+    onAssignToMe={handleAssignToMe}
+    isAssigning={isAssigning}
+  />;
 }
