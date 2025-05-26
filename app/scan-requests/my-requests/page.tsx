@@ -14,6 +14,15 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 import { useSupabaseWithClerk } from '@/lib/auth/supabase-clerk';
 import { Database } from '@/types/database.types';
 import useUserRole from '@/hooks/use-user-role';
@@ -32,8 +41,12 @@ interface ScanRequestWithDetails extends DbScanRequest {
 const MyRequestsList = ({ userRole }: { userRole: UserRole | null }) => {
   const [scanRequests, setScanRequests] = useState<DbScanRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [requestToCancel, setRequestToCancel] = useState<string | null>(null);
   const router = useRouter();
   const { user } = useUser();
+  const { toast } = useToast();
   const { supabase, isLoaded: isSupabaseLoaded } = useSupabaseWithClerk();
 
   useEffect(() => {
@@ -122,6 +135,48 @@ const MyRequestsList = ({ userRole }: { userRole: UserRole | null }) => {
     router.push(`/scan-requests/${requestId}`);
   };
 
+  const handleCancelClick = (requestId: string) => {
+    setRequestToCancel(requestId);
+    setDialogOpen(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!requestToCancel || !supabase) {
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      const { error } = await supabase
+        .from('scan_requests')
+        .update({ status: 'cancelled' })
+        .eq('id', requestToCancel);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Scan request cancelled successfully',
+      });
+
+      // Update the local state
+      setScanRequests(scanRequests.map(req => 
+        req.id === requestToCancel ? { ...req, status: 'cancelled' } : req
+      ));
+    } catch (error) {
+      console.error('Error cancelling scan request:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to cancel scan request',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCancelling(false);
+      setDialogOpen(false);
+      setRequestToCancel(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-40">
@@ -206,6 +261,7 @@ const MyRequestsList = ({ userRole }: { userRole: UserRole | null }) => {
                           variant="outline" 
                           size="sm"
                           className="flex items-center text-xs bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+                          onClick={() => handleCancelClick(request.id)}
                         >
                           <X className="h-3 w-3 mr-1" />
                           Cancel
@@ -219,6 +275,33 @@ const MyRequestsList = ({ userRole }: { userRole: UserRole | null }) => {
           </table>
         </div>
       </Card>
+
+      {/* Cancellation Confirmation Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Scan Request</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this scan request? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+            >
+              No, Keep Request
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancel}
+              disabled={isCancelling}
+            >
+              {isCancelling ? 'Cancelling...' : 'Yes, Cancel Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
