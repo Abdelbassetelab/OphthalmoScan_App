@@ -57,7 +57,8 @@ export default function ScanRequestAnalysePage() {
   const { user, isLoaded: isUserLoaded } = useUser();
   const router = useRouter();
   const { role, isLoading: isRoleLoading } = useUserRole();
-  const { supabase, isLoaded: isSupabaseLoaded } = useSupabaseWithClerk();  const [isLoading, setIsLoading] = useState(true);
+  const { supabase, isLoaded: isSupabaseLoaded } = useSupabaseWithClerk();
+  const [isLoading, setIsLoading] = useState(true);
   const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -66,6 +67,9 @@ export default function ScanRequestAnalysePage() {
   const [doctorNotes, setDoctorNotes] = useState('');
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
   const params = useParams();
   const id = params?.id as string;
   const { toast } = useToast();
@@ -88,8 +92,7 @@ export default function ScanRequestAnalysePage() {
     };
 
     checkModelStatus();
-  }, []);
-  const fetchScanRequest = async () => {
+  }, []);  const fetchScanRequest = async () => {
     try {
       if (!supabase) return;
       
@@ -114,6 +117,11 @@ export default function ScanRequestAnalysePage() {
         // Set doctor notes if they exist
         if (data.doctor_note) {
           setDoctorNotes(data.doctor_note);
+        }
+        
+        // Set image URL if it exists
+        if (data.image_url) {
+          setImageUrl(data.image_url);
         }
         
         setScanRequest(scanRequestData);
@@ -149,10 +157,19 @@ export default function ScanRequestAnalysePage() {
 
     fetchScanRequest();
   }, [isAuthLoaded, isUserLoaded, isRoleLoading, isSignedIn, user, router, id, supabase, isSupabaseLoaded, role]);
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
+      // File size validation (10MB limit)
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        toast({
+          title: 'File Too Large',
+          description: 'Please select an image under 10MB',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
       setFile(selectedFile);
       const reader = new FileReader();
       reader.onload = () => {
@@ -160,9 +177,10 @@ export default function ScanRequestAnalysePage() {
       };
       reader.readAsDataURL(selectedFile);
       setResult(null);
+      // Reset image URL and result when new file is selected
+      setImageUrl(null);
     }
   };
-
   const handleAnalyzeImage = async () => {
     if (!file) {
       toast({
@@ -185,6 +203,15 @@ export default function ScanRequestAnalysePage() {
     try {
       setIsAnalyzing(true);
       setResult(null);
+      
+      // First upload the image to storage
+      if (!imageUrl) {
+        const uploadedImageUrl = await uploadImageToStorage(file);
+        
+        if (!uploadedImageUrl) {
+          throw new Error('Failed to upload image to storage');
+        }
+      }
       
       // Analyze the image with user ID
       const predictionResult = await predictEyeDisease(file, user.id);
@@ -222,10 +249,10 @@ export default function ScanRequestAnalysePage() {
       setIsAnalyzing(false);
     }
   };
-
   const clearImage = () => {
     setFile(null);
     setImagePreview(null);
+    setImageUrl(null);
     setResult(null);
   };
 
@@ -322,6 +349,92 @@ export default function ScanRequestAnalysePage() {
       });
     } finally {
       setIsSavingNotes(false);
+    }
+  };
+
+  const uploadImageToStorage = async (file: File): Promise<string | null> => {
+    if (!supabase || !user) {
+      toast({
+        title: 'Error',
+        description: 'Authentication required for image upload',
+        variant: 'destructive',
+      });
+      return null;
+    }
+    
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+      
+      // File size validation (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: 'File Too Large',
+          description: 'Please select an image under 10MB',
+          variant: 'destructive',
+        });
+        return null;
+      }
+      
+      // Generate a unique file name
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${id}_${Date.now()}.${fileExt}`;
+      const filePath = `scan-requests/${id}/${fileName}`;
+      
+      // Upload the file to the existing 'images' bucket
+      const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          onUploadProgress: (progress) => {
+            const percentage = (progress.loaded / progress.total) * 100;
+            setUploadProgress(Math.round(percentage));
+          },
+        });
+      
+      if (error) {
+        console.error('Error uploading image:', error);
+        throw new Error(error.message);
+      }
+      
+      // Get the public URL for the uploaded file
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(data.path);
+      
+      // Update the scan request with the image URL
+      const { error: updateError } = await supabase
+        .from('scan_requests')
+        .update({ 
+          has_image: true,
+          image_url: publicUrl 
+        })
+        .eq('id', id);
+      
+      if (updateError) {
+        console.error('Error updating scan request with image URL:', updateError);
+        throw new Error(updateError.message);
+      }
+      
+      setImageUrl(publicUrl);
+      
+      toast({
+        title: 'Upload Complete',
+        description: 'Image uploaded successfully',
+      });
+      
+      return publicUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      toast({
+        title: 'Upload Failed',
+        description: error instanceof Error ? error.message : 'Failed to upload the image',
+        variant: 'destructive',
+      });
+      return null;
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -483,7 +596,7 @@ export default function ScanRequestAnalysePage() {
           </h2>
           
           <div className="space-y-4">
-            {!imagePreview ? (
+            {!imagePreview && !imageUrl ? (
               <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-8">
                 <input
                   type="file"
@@ -521,13 +634,24 @@ export default function ScanRequestAnalysePage() {
                 </div>
                 <div className="relative aspect-video w-full bg-black">
                   <Image
-                    src={imagePreview}
+                    src={imagePreview || imageUrl}
                     alt="Retinal Scan Preview"
                     fill
                     className="object-contain"
                     unoptimized
                   />
                 </div>
+                {isUploading && (
+                  <div className="bg-blue-50 p-3">
+                    <div className="flex justify-center items-center">
+                      <RefreshCw className="h-5 w-5 animate-spin text-blue-600 mr-2" />
+                      <span className="text-blue-700">Uploading image: {uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
+                      <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
+                    </div>
+                  </div>
+                )}
                 {isAnalyzing ? (
                   <div className="bg-blue-50 p-3">
                     <div className="flex justify-center items-center">
@@ -540,7 +664,7 @@ export default function ScanRequestAnalysePage() {
                     <Button
                       onClick={handleAnalyzeImage}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={serviceStatus !== 'online'}
+                      disabled={serviceStatus !== 'online' || isUploading}
                     >
                       <FileImage className="h-4 w-4 mr-2" />
                       Analyze Retinal Scan
