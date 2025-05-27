@@ -233,12 +233,18 @@ const ScanRequestDetail = ({
             >
               {isAssigning ? 'Assigning...' : 'Assign to Me'}
             </Button>
-          )}
-          
-          {isDoctor(userRole) && scanRequest.status === 'assigned' && (
-            <Button className="bg-green-600 hover:bg-green-700">
-              Review Scan
-            </Button>
+          )}            {isDoctor(userRole) && scanRequest.status === 'assigned' && (
+            <>
+              <Button className="bg-green-600 hover:bg-green-700">
+                Review Scan
+              </Button>
+              <Button 
+                className="bg-purple-600 hover:bg-purple-700"
+                onClick={() => router.push(`/scan-requests/analyse/${scanRequest.id}`)}
+              >
+                Analyze Scan
+              </Button>
+            </>
           )}
           
           {isPatient(userRole) && scanRequest.status === 'pending' && (
