@@ -36,6 +36,17 @@ interface ScanRequest extends DbScanRequest {
   doctorId?: string;
   patientId?: string;
   images?: { id: string; url: string; uploadedAt: string }[];
+  metadata?: {
+    prediction_result?: {
+      prediction: string;
+      confidence: number;
+      allPredictions: Array<{ label: string; probability: number }>;
+    };
+    analyzed_at?: string;
+    analyzed_by?: string;
+    analyzed_by_name?: string;
+    model_version?: string;
+  };
 }
 
 // Component for displaying scan request details
@@ -54,6 +65,14 @@ const ScanRequestDetail = ({
 
   const handleAssignToMe = async () => {
     await onAssignToMe();
+  };
+  
+  // Helper function to format condition names
+  const formatCondition = (condition: string): string => {
+    return condition
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   if (!scanRequest) {
@@ -78,13 +97,14 @@ const ScanRequestDetail = ({
       minute: '2-digit'
     });
   };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
         return <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-xs font-medium">Pending</span>;
       case 'assigned':
         return <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">Assigned</span>;
+      case 'analyzed':
+        return <span className="px-2 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-medium">Analyzed</span>;
       case 'reviewed':
         return <span className="px-2 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-medium">Reviewed</span>;
       case 'completed':
@@ -181,9 +201,7 @@ const ScanRequestDetail = ({
               )}
             </div>
           </div>
-        </div>
-
-        {/* Notes Section */}
+        </div>        {/* Notes Section */}
         <div className="mt-6 pt-6 border-t">
           <h3 className="text-lg font-medium text-gray-800 flex items-center mb-4">
             <FileText className="h-5 w-5 mr-2 text-gray-500" />
@@ -193,6 +211,163 @@ const ScanRequestDetail = ({
             <p className="text-gray-700">{scanRequest.notes || 'No notes provided'}</p>
           </div>
         </div>
+
+        {/* Analysis Results Section - Only show if analyzed or reviewed */}
+        {(scanRequest.status === 'analyzed' || scanRequest.status === 'reviewed') && scanRequest.metadata?.prediction_result && (
+          <div className="mt-6 pt-6 border-t">
+            <h3 className="text-lg font-medium text-gray-800 flex items-center mb-4">
+              <Eye className="h-5 w-5 mr-2 text-gray-500" />
+              Analysis Results
+              {scanRequest.metadata?.analyzed_at && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  (Analyzed on {new Date(scanRequest.metadata.analyzed_at).toLocaleDateString()})
+                </span>
+              )}
+            </h3>
+              {/* Primary Diagnosis Card */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg mb-6 border border-blue-100">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+                <div className="flex items-center">
+                  <div className="bg-blue-600 rounded-full p-2 mr-3">
+                    <Eye className="h-6 w-6 text-white" />
+                  </div>
+                  <span className="text-lg font-medium text-gray-700">Primary Diagnosis</span>
+                </div>                <div className="mt-2 md:mt-0">
+                  <span className="text-xl font-bold text-blue-700 bg-white px-4 py-2 rounded-full shadow-sm border border-blue-200">
+                    {formatCondition(scanRequest.metadata.prediction_result.prediction)}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Display the retinal scan image if available */}
+              {scanRequest.image_url && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="border rounded-lg overflow-hidden shadow-md">
+                    <div className="bg-gray-800 px-3 py-2 flex justify-between items-center">
+                      <span className="text-white text-sm font-medium">Retinal Scan Image</span>
+                      {scanRequest.metadata?.analyzed_at && (
+                        <span className="text-gray-300 text-xs">
+                          {new Date(scanRequest.metadata.analyzed_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="bg-black">
+                      <img 
+                        src={scanRequest.image_url} 
+                        alt="Retinal Scan" 
+                        className="object-contain w-full h-64"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-100 p-5">
+                    <div className="mb-4">
+                      <h4 className="text-gray-700 text-sm font-medium mb-2">Primary Diagnosis</h4>
+                      <div className="flex items-center">
+                        <div className="bg-blue-600 rounded-full p-1 mr-2">
+                          <Eye className="h-4 w-4 text-white" />
+                        </div>
+                        <span className="text-xl font-bold text-blue-700">
+                          {formatCondition(scanRequest.metadata.prediction_result.prediction)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-blue-100 pt-3 mt-3">
+                      <h4 className="text-gray-700 text-sm font-medium mb-2">Confidence Score</h4>
+                      <div className="text-3xl font-bold text-blue-700">
+                        {scanRequest.metadata.prediction_result.confidence.toFixed(1)}%
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-blue-100 pt-3 mt-3">
+                      <h4 className="text-gray-700 text-sm font-medium mb-2">Analysis By</h4>
+                      <div className="flex items-center">
+                        <Stethoscope className="h-4 w-4 mr-2 text-blue-600" />
+                        <span className="text-gray-700">{scanRequest.metadata.analyzed_by_name || "Doctor"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="mt-6">
+                <h3 className="text-sm uppercase tracking-wider text-gray-500 mb-3">Confidence Levels</h3>
+                <div className="space-y-4">
+                  {scanRequest.metadata.prediction_result.allPredictions.map(({ label, probability }) => (
+                    <div key={label} className="space-y-1">                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-gray-700">
+                          {formatCondition(label)}
+                        </span>
+                        <span className="font-mono text-blue-700 font-semibold">{probability.toFixed(2)}%</span>
+                      </div>
+                      <div className="w-full bg-white rounded-full h-3 shadow-inner">
+                        <div
+                          className={`${
+                            label === scanRequest.metadata.prediction_result.prediction 
+                              ? 'bg-blue-600' 
+                              : probability > 30 
+                                ? 'bg-blue-400' 
+                                : 'bg-gray-300'
+                          } h-3 rounded-full transition-all duration-500 ease-in-out`}
+                          style={{ width: `${probability}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {/* Doctor's Notes Section (if available) */}
+            {scanRequest.doctor_note && (
+              <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mt-4">
+                <h3 className="font-semibold text-lg mb-4 text-gray-800 flex items-center">
+                  <Stethoscope className="h-5 w-5 mr-2 text-blue-600" />
+                  Doctor's Assessment
+                </h3>
+                <div className="p-4 bg-gray-50 rounded-md">
+                  <p className="text-gray-700">{scanRequest.doctor_note}</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Recommendations Section */}
+            <div className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm mt-4">
+              <h3 className="font-semibold text-lg mb-4 text-gray-800 flex items-center">
+                <Info className="h-5 w-5 mr-2 text-blue-600" />
+                Recommendations
+              </h3>
+              <div className="p-4 bg-blue-50 rounded-md border border-blue-100">
+                <p className="text-gray-700 font-medium mb-3">
+                  {scanRequest.metadata.prediction_result.prediction === 'normal' 
+                    ? 'No follow-up needed at this time. Regular routine eye examinations are recommended.'
+                    : `Based on the AI analysis (${formatCondition(scanRequest.metadata.prediction_result.prediction)}), further clinical evaluation is recommended to confirm this diagnosis.`}
+                </p>
+                
+                {scanRequest.metadata.prediction_result.prediction !== 'normal' && (
+                  <ul className="list-disc list-inside text-gray-600 space-y-2 pl-2">
+                    <li>Schedule follow-up examination within 2-4 weeks</li>
+                    <li>Consider additional specialized tests to confirm diagnosis</li>
+                    <li>Review patient history for risk factors related to {formatCondition(scanRequest.metadata.prediction_result.prediction)}</li>
+                    <li>Monitor for any changes in symptoms or vision</li>
+                  </ul>
+                )}
+              </div>
+            </div>
+            
+            {/* Download Report Button */}
+            <div className="mt-4 flex justify-end">
+              <Button 
+                className="bg-blue-600 hover:bg-blue-700 flex items-center"
+                onClick={() => router.push(`/scan-requests/analyse/${scanRequest.id}`)}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                View Complete Analysis
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Uploaded Images (if any) */}
         {scanRequest.images && scanRequest.images.length > 0 && (
@@ -222,10 +397,10 @@ const ScanRequestDetail = ({
               ))}
             </div>
           </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="mt-6 pt-6 border-t flex flex-wrap gap-3 justify-end">          {isDoctor(userRole) && scanRequest.status === 'pending' && (
+        )}        {/* Action Buttons */}
+        <div className="mt-6 pt-6 border-t flex flex-wrap gap-3 justify-end">
+          {/* For Doctors */}
+          {isDoctor(userRole) && scanRequest.status === 'pending' && (
             <Button 
               className="bg-blue-600 hover:bg-blue-700"
               onClick={handleAssignToMe}
@@ -233,26 +408,53 @@ const ScanRequestDetail = ({
             >
               {isAssigning ? 'Assigning...' : 'Assign to Me'}
             </Button>
-          )}            {isDoctor(userRole) && scanRequest.status === 'assigned' && (
+          )}
+          
+          {isDoctor(userRole) && (
             <>
-              <Button className="bg-green-600 hover:bg-green-700">
-                Review Scan
-              </Button>
-              <Button 
-                className="bg-purple-600 hover:bg-purple-700"
-                onClick={() => router.push(`/scan-requests/analyse/${scanRequest.id}`)}
-              >
-                Analyze Scan
-              </Button>
+              {scanRequest.status === 'assigned' && (
+                <>
+                  <Button 
+                    className="bg-purple-600 hover:bg-purple-700"
+                    onClick={() => router.push(`/scan-requests/analyse/${scanRequest.id}`)}
+                  >
+                    Analyze Scan
+                  </Button>
+                </>
+              )}
+              
+              {(scanRequest.status === 'analyzed' || scanRequest.status === 'reviewed') && (
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => router.push(`/scan-requests/analyse/${scanRequest.id}`)}
+                >
+                  View Analysis Details
+                </Button>
+              )}
             </>
           )}
           
-          {isPatient(userRole) && scanRequest.status === 'pending' && (
-            <Button variant="destructive">
-              Cancel Request
-            </Button>
+          {/* For Patients */}
+          {isPatient(userRole) && (
+            <>
+              {scanRequest.status === 'pending' && (
+                <Button variant="destructive">
+                  Cancel Request
+                </Button>
+              )}
+              
+              {(scanRequest.status === 'analyzed' || scanRequest.status === 'reviewed') && (
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => router.push(`/scan-requests/analyse/${scanRequest.id}`)}
+                >
+                  View Analysis Results
+                </Button>
+              )}
+            </>
           )}
           
+          {/* For Admins */}
           {isAdmin(userRole) && (
             <Button className="bg-purple-600 hover:bg-purple-700">
               Reassign Request
@@ -276,7 +478,6 @@ export default function ScanRequestDetailPage() {
   const params = useParams();
   const id = params?.id as string;
   const { toast } = useToast();
-
   const fetchScanRequest = async () => {
     try {
       if (!supabase) return;
@@ -298,6 +499,17 @@ export default function ScanRequestDetailPage() {
           requestDate: data.created_at,
           notes: data.symptoms || data.medical_history || 'No additional notes available'
         };
+        
+        // If the scan request has an image, add it to the images array
+        if (data.image_url) {
+          scanRequestData.images = [
+            {
+              id: 'main-image',
+              url: data.image_url,
+              uploadedAt: data.updated_at || data.created_at
+            }
+          ];
+        }
         
         setScanRequest(scanRequestData);
       } else {

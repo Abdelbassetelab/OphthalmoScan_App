@@ -30,6 +30,9 @@ import { Database } from '@/types/database.types';
 import html2canvas from 'html2canvas';
 // @ts-ignore
 import jsPDF from 'jspdf';
+import RetinalScanReport, { RetinalScanReportViewer } from '@/components/reports/RetinalScanReport';
+import { pdf } from '@react-pdf/renderer';
+import { saveAs } from 'file-saver';
 
 // Types for scan request
 type DbScanRequest = Database['public']['Tables']['scan_requests']['Row'];
@@ -44,6 +47,17 @@ interface ScanRequest extends DbScanRequest {
   images?: { id: string; url: string; uploadedAt: string }[];
   patient_username?: string;
   assigned_doctor_username?: string;
+  metadata?: {
+    prediction_result?: {
+      prediction: string;
+      confidence: number;
+      allPredictions: Array<{ label: string; probability: number }>;
+    };
+    analyzed_at?: string;
+    analyzed_by?: string;
+    analyzed_by_name?: string;
+    model_version?: string;
+  };
 }
 
 interface AnalysisResult {
@@ -68,8 +82,8 @@ export default function ScanRequestAnalysePage() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [showPdfPreview, setShowPdfPreview] = useState<boolean>(false);
   const params = useParams();
   const id = params?.id as string;
   const { toast } = useToast();
@@ -122,6 +136,19 @@ export default function ScanRequestAnalysePage() {
         // Set image URL if it exists
         if (data.image_url) {
           setImageUrl(data.image_url);
+        }
+        
+        // Check if there are prediction results in metadata
+        if (data.metadata && data.metadata.prediction_result) {
+          const predictionData = data.metadata.prediction_result;
+          setResult({
+            prediction: predictionData.prediction,
+            confidence: predictionData.confidence,
+            allPredictions: predictionData.allPredictions
+          });
+          
+          // If we have prediction results, set the analyzed flag to true so we don't show the upload form again
+          console.log('Prediction data found in metadata:', predictionData);
         }
         
         setScanRequest(scanRequestData);
@@ -180,8 +207,7 @@ export default function ScanRequestAnalysePage() {
       // Reset image URL and result when new file is selected
       setImageUrl(null);
     }
-  };
-  const handleAnalyzeImage = async () => {
+  };  const handleAnalyzeImage = async () => {
     if (!file) {
       toast({
         title: 'No Image Selected',
@@ -204,11 +230,12 @@ export default function ScanRequestAnalysePage() {
       setIsAnalyzing(true);
       setResult(null);
       
-      // First upload the image to storage
-      if (!imageUrl) {
-        const uploadedImageUrl = await uploadImageToStorage(file);
+      // First upload the image to storage if not already uploaded
+      let finalImageUrl = imageUrl;
+      if (!finalImageUrl) {
+        finalImageUrl = await uploadImageToStorage(file);
         
-        if (!uploadedImageUrl) {
+        if (!finalImageUrl) {
           throw new Error('Failed to upload image to storage');
         }
       }
@@ -227,11 +254,65 @@ export default function ScanRequestAnalysePage() {
       
       const sortedPredictions = [...predictions].sort((a, b) => b.probability - a.probability);
       
-      setResult({
+      const resultData = {
         prediction: predictionResult.top_prediction,
         confidence: sortedPredictions[0].probability,
         allPredictions: sortedPredictions,
-      });
+      };
+      
+      setResult(resultData);
+      
+      // Get user information for metadata
+      const doctorName = user.fullName || user.username || 'Unknown Doctor';
+      
+      // Update the scan request with prediction results in metadata column
+      if (supabase && id) {
+        try {
+          // Get existing metadata to preserve any existing data
+          const { data: existingData } = await supabase
+            .from('scan_requests')
+            .select('metadata')
+            .eq('id', id)
+            .single();
+          
+          const existingMetadata = existingData?.metadata || {};
+          
+          // Create updated metadata object with new prediction data
+          const updatedMetadata = {
+            ...existingMetadata,
+            prediction_result: resultData,
+            analyzed_at: new Date().toISOString(),
+            analyzed_by: user.id,
+            analyzed_by_name: doctorName,
+            model_version: '1.0', // You can add model version info if available
+            analyzed_device: navigator.userAgent || 'Unknown Device',
+          };
+          
+          const { error: updateError } = await supabase
+            .from('scan_requests')
+            .update({
+              metadata: updatedMetadata,
+              status: 'analyzed' // Update status to indicate this scan has been analyzed
+            })
+            .eq('id', id);
+            
+          if (updateError) {
+            console.error('Error updating scan request metadata:', updateError);
+          } else {
+            // Update the scan request in state with the new metadata
+            setScanRequest(prev => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                metadata: updatedMetadata,
+                status: 'analyzed'
+              };
+            });
+          }
+        } catch (metadataError) {
+          console.error('Error saving prediction metadata:', metadataError);
+        }
+      }
       
       toast({
         title: 'Analysis Complete',
@@ -271,7 +352,7 @@ export default function ScanRequestAnalysePage() {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   };  const handleDownloadPDF = async () => {
-    if (!reportRef.current) return;
+    if (!scanRequest) return;
 
     try {
       toast({
@@ -279,27 +360,54 @@ export default function ScanRequestAnalysePage() {
         description: 'Please wait while we generate your report',
       });
 
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        logging: false,
-        useCORS: true,
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });      const imgWidth = 210;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-      
-      // Use patient_username in the filename if available
+      // Format the patient name for the filename
       const patientName = scanRequest.patient_username 
         ? scanRequest.patient_username.replace(/\s+/g, '-') 
         : `patient-${scanRequest.patient_id?.substring(0, 8)}`;
-      pdf.save(`eye-scan-analysis-${patientName}-${id}.pdf`);
+      
+      // Get the current date formatted
+      const currentDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      
+      // Use the analyzed date from metadata if available
+      const analyzedDate = scanRequest.metadata?.analyzed_at 
+        ? new Date(scanRequest.metadata.analyzed_at).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
+        : currentDate;
+      
+      // Create the PDF document using react-pdf
+      const pdfDocument = (
+        <RetinalScanReport
+          patientName={scanRequest.patient_username || `Patient ${scanRequest.patient_id?.substring(0, 8)}`}
+          patientId={(scanRequest.patientId || scanRequest.patient_id) || '-'}
+          scanDate={formatDate(scanRequest.requestDate || scanRequest.created_at)}
+          reportDate={analyzedDate}
+          doctorName={scanRequest.metadata?.analyzed_by_name || scanRequest.assigned_doctor_username || `Dr. ${scanRequest.assigned_doctor_id?.substring(0, 8)}`}
+          scanRequestId={scanRequest.id}
+          scanImageUrl={imageUrl || imagePreview || ''}
+          clinicalNotes={scanRequest.notes}
+          doctorNotes={doctorNotes}
+          prediction={result?.prediction}
+          predictionScores={result?.allPredictions}
+          recommendation={result ? 
+            result.prediction === 'normal' 
+              ? 'No follow-up needed at this time. Regular routine eye examinations are recommended.'
+              : 'Based on the AI analysis, further clinical evaluation is recommended to confirm this diagnosis. Consider scheduling a follow-up appointment within 2-4 weeks.'
+            : undefined}
+        />
+      );
+      
+      // Generate a blob from the PDF document
+      const blob = await pdf(pdfDocument).toBlob();
+      
+      // Save the PDF using file-saver
+      saveAs(blob, `ophthalmoscan-report-${patientName}-${id}.pdf`);
 
       toast({
         title: 'PDF Generated',
@@ -588,7 +696,7 @@ export default function ScanRequestAnalysePage() {
               </div>
             </div>
           </div>
-        )}{/* Image Upload */}
+        )}        {/* Image Upload or Display */}
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-semibold mb-4 flex items-center text-gray-800">
             <Eye className="h-5 w-5 mr-2 text-blue-600" />
@@ -596,6 +704,7 @@ export default function ScanRequestAnalysePage() {
           </h2>
           
           <div className="space-y-4">
+            {/* Show upload form only if no image exists and no analysis has been performed */}
             {!imagePreview && !imageUrl ? (
               <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-8">
                 <input
@@ -621,16 +730,26 @@ export default function ScanRequestAnalysePage() {
             ) : (
               <div className="rounded-lg overflow-hidden shadow-md border border-gray-100">
                 <div className="bg-gray-800 px-4 py-2 flex justify-between items-center">
-                  <span className="text-white text-sm font-medium">Retinal Scan Image</span>
-                  <Button 
-                    variant="ghost"
-                    size="icon" 
-                    className="h-7 w-7 rounded-full bg-gray-700 hover:bg-gray-600" 
-                    onClick={clearImage}
-                    disabled={isAnalyzing}
-                  >
-                    <X className="h-4 w-4 text-white" />
-                  </Button>
+                  <span className="text-white text-sm font-medium">
+                    {result ? 'Analyzed Retinal Scan' : 'Retinal Scan Image'}
+                    {scanRequest?.metadata?.analyzed_at && (
+                      <span className="ml-2 text-gray-300 text-xs">
+                        (Analyzed: {new Date(scanRequest.metadata.analyzed_at).toLocaleDateString()})
+                      </span>
+                    )}
+                  </span>
+                  {/* Only show clear button if no analysis has been performed */}
+                  {!result && (
+                    <Button 
+                      variant="ghost"
+                      size="icon" 
+                      className="h-7 w-7 rounded-full bg-gray-700 hover:bg-gray-600" 
+                      onClick={clearImage}
+                      disabled={isAnalyzing}
+                    >
+                      <X className="h-4 w-4 text-white" />
+                    </Button>
+                  )}
                 </div>
                 <div className="relative aspect-video w-full bg-black">
                   <Image
@@ -660,26 +779,53 @@ export default function ScanRequestAnalysePage() {
                     </div>
                   </div>
                 ) : (
+                  // Only show analyze button if we have an image but no analysis yet
+                  !result && (
+                    <div className="p-3 bg-gray-50">
+                      <Button
+                        onClick={handleAnalyzeImage}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                        disabled={serviceStatus !== 'online' || isUploading}
+                      >
+                        <FileImage className="h-4 w-4 mr-2" />
+                        Analyze Retinal Scan
+                      </Button>
+                    </div>
+                  )
+                )}
+                {/* Show analyzed info if available */}
+                {scanRequest?.metadata?.analyzed_by_name && (
                   <div className="p-3 bg-gray-50">
-                    <Button
-                      onClick={handleAnalyzeImage}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={serviceStatus !== 'online' || isUploading}
-                    >
-                      <FileImage className="h-4 w-4 mr-2" />
-                      Analyze Retinal Scan
-                    </Button>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Stethoscope className="h-4 w-4 mr-2 text-blue-600" />
+                      <span>Analyzed by: {scanRequest.metadata.analyzed_by_name}</span>
+                      {scanRequest.metadata.analyzed_at && (
+                        <span className="ml-2 text-gray-500">
+                          on {new Date(scanRequest.metadata.analyzed_at).toLocaleDateString()} at {new Date(scanRequest.metadata.analyzed_at).toLocaleTimeString()}
+                        </span>
+                      )}
+                    </div>
+                    {scanRequest.metadata.model_version && (
+                      <div className="flex items-center text-xs text-gray-500 mt-1">
+                        <span>Model version: {scanRequest.metadata.model_version}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
           </div>
-        </div>{/* Analysis Results */}
+        </div>        {/* Analysis Results */}
         {result && (
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-lg font-semibold mb-4 flex items-center text-gray-800">
               <FileText className="h-5 w-5 mr-2 text-blue-600" />
               AI Analysis Results
+              {scanRequest?.metadata?.analyzed_at && (
+                <span className="ml-2 text-sm font-normal text-gray-500">
+                  (Analyzed on {new Date(scanRequest.metadata.analyzed_at).toLocaleDateString()})
+                </span>
+              )}
             </h2>
             
             {/* Primary Diagnosis Card */}
@@ -817,6 +963,14 @@ export default function ScanRequestAnalysePage() {
                 Return to Request
               </Button>
               <Button 
+                variant="outline"
+                onClick={() => setShowPdfPreview(!showPdfPreview)}
+                className="flex items-center gap-2"
+              >
+                <Eye className="h-4 w-4" />
+                {showPdfPreview ? 'Hide Preview' : 'Preview Report'}
+              </Button>
+              <Button 
                 onClick={handleDownloadPDF}
                 className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
               >
@@ -824,6 +978,38 @@ export default function ScanRequestAnalysePage() {
                 Download PDF Report
               </Button>
             </div>
+          </div>
+        </div>
+      )}      {/* PDF Preview */}
+      {showPdfPreview && scanRequest && (
+        <div className="mt-6 bg-white p-4 rounded-lg border border-gray-200 shadow">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Report Preview</h3>
+          <div className="w-full border-2 border-gray-100 rounded overflow-hidden">
+            <RetinalScanReportViewer
+              patientName={scanRequest.patient_username || `Patient ${scanRequest.patient_id?.substring(0, 8)}`}
+              patientId={(scanRequest.patientId || scanRequest.patient_id) || '-'}
+              scanDate={formatDate(scanRequest.requestDate || scanRequest.created_at)}
+              reportDate={scanRequest.metadata?.analyzed_at 
+                ? new Date(scanRequest.metadata.analyzed_at).toLocaleDateString('en-US', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                  }) 
+                : new Date().toLocaleDateString('en-US', {
+                    year: 'numeric', month: 'long', day: 'numeric'
+                  })
+              }
+              doctorName={scanRequest.metadata?.analyzed_by_name || scanRequest.assigned_doctor_username || `Dr. ${scanRequest.assigned_doctor_id?.substring(0, 8)}`}
+              scanRequestId={scanRequest.id}
+              scanImageUrl={imageUrl || imagePreview || ''}
+              clinicalNotes={scanRequest.notes}
+              doctorNotes={doctorNotes}
+              prediction={result?.prediction}
+              predictionScores={result?.allPredictions}
+              recommendation={result ? 
+                result.prediction === 'normal' 
+                  ? 'No follow-up needed at this time. Regular routine eye examinations are recommended.'
+                  : 'Based on the AI analysis, further clinical evaluation is recommended to confirm this diagnosis. Consider scheduling a follow-up appointment within 2-4 weeks.'
+                : undefined}
+            />
           </div>
         </div>
       )}
