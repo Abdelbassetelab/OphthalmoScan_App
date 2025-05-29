@@ -138,9 +138,8 @@ export const menuItemsByRole: Record<string, MenuItem[]> = {
       icon: Home, 
       roleAccess: ['doctor'],
       color: 'text-teal-600'
-    },
-    { 
-      path: '/model-test', 
+    },    { 
+      path: '/scan-requests/new', 
       label: 'New Scan', 
       icon: Eye, 
       roleAccess: ['doctor'],
@@ -156,16 +155,16 @@ export const menuItemsByRole: Record<string, MenuItem[]> = {
         { path: '/patients/list', label: 'Patient List', icon: Clipboard, roleAccess: ['doctor'] },
         { path: '/patients/appointments', label: 'Appointments', icon: Calendar, roleAccess: ['doctor'] }
       ]
-    },
-    { 
-      path: '/diagnosis', 
-      label: 'Diagnosis', 
-      icon: HeartPulse, 
+    },    { 
+      path: '/scan-requests', 
+      label: 'Scan Requests', 
+      icon: Stethoscope, 
       roleAccess: ['doctor'],
       color: 'text-teal-600',
       children: [
-        { path: '/diagnosis/new', label: 'New Diagnosis', icon: FileImage, roleAccess: ['doctor'] },
-        { path: '/diagnosis/history', label: 'History', icon: Clock, roleAccess: ['doctor'] }
+        { path: '/scan-requests', label: 'All Requests', icon: Clipboard, roleAccess: ['doctor'] },
+        { path: '/scan-requests/my-requests', label: 'Request Management', icon: Clock, roleAccess: ['doctor'] },
+        { path: '/scan-requests/new', label: 'New Request', icon: Eye, roleAccess: ['doctor'] }
       ]
     }
   ],

@@ -150,15 +150,12 @@ export default function DoctorDashboardPage() {
           fetchScanReviews(),
           fetchRecentDiagnoses(),
           fetchPerformanceMetrics()
-        ]);
-
-        // Update state with all fetched data
+        ]);        // Update state with all fetched data
         setDashboardData({
           appointments: appointmentsData,
           scanReviews: scanReviewsData,
           recentDiagnoses: diagnosesData,
-          performance: performanceData,
-          scanAnalytics: {
+          performance: performanceData,          scanAnalytics: {
             priority: {
               high: scanReviewsData.urgent,
               medium: scanReviewsData.pending - scanReviewsData.urgent
@@ -167,7 +164,10 @@ export default function DoctorDashboardPage() {
               pending: scanReviewsData.pending,
               processing: Math.floor(scanReviewsData.pending * 0.4) // Approximation for processing scans
             },
-            averageResponseTime: 2.5, // This could be calculated from real data in the future
+            // Calculate average response time based on waiting patients
+            averageResponseTime: appointmentsData.waiting > 0 ? 
+              Math.max(1.5, Math.min(5, (appointmentsData.waiting / 3))) : 
+              1.5, // Scale between 1.5-5 hours based on waiting count
             completionRate: performanceData.diagnosisAccuracy - 5 // Approximation for now
           }
         });
@@ -196,10 +196,8 @@ export default function DoctorDashboardPage() {
       // Tomorrow's date for the query range
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowISOString = tomorrow.toISOString();
-
-      // Query appointments for today where the doctor is assigned
-      const { data: appointments, error } = await supabase
+      const tomorrowISOString = tomorrow.toISOString();      // First query for appointments assigned to this doctor (for the today's list)
+      const { data: doctorAppointments, error: doctorError } = await supabase
         .from('scan_requests')
         .select('id, patient_username, created_at, status')
         .eq('assigned_doctor_id', user.id)
@@ -207,13 +205,21 @@ export default function DoctorDashboardPage() {
         .lt('created_at', tomorrowISOString)
         .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching appointments:', error);
+      if (doctorError) {
+        console.error('Error fetching doctor appointments:', doctorError);
         return { today: [], waiting: 0 };
       }
-
-      // Format appointments for display
-      const formattedAppointments = appointments.map(appt => {
+        // Second query to get all waiting patients in the system
+      const { data: allWaitingPatients, error: waitingError } = await supabase
+        .from('scan_requests')
+        .select('id')
+        .eq('status', 'pending')
+        .is('assigned_doctor_id', null);
+        
+      if (waitingError) {
+        console.error('Error fetching waiting patients:', waitingError);
+      }// Format appointments for display
+      const formattedAppointments = doctorAppointments.map(appt => {
         const appointmentTime = new Date(appt.created_at);
         
         // Calculate wait time based on status and current time
@@ -236,21 +242,20 @@ export default function DoctorDashboardPage() {
           status: appt.status === 'pending' ? 'Waiting' : 'Scheduled',
           waitTime
         };
-      });
-
-      // Count waiting patients
-      const waitingCount = appointments.filter(appt => appt.status === 'pending').length;
+      });      // Calculate total waiting count - includes both doctor's waiting patients and unassigned ones
+      const doctorWaitingCount = doctorAppointments?.filter(appt => appt.status === 'pending').length || 0;
+      const unassignedWaitingCount = allWaitingPatients?.length || 0;
+      const totalWaitingCount = doctorWaitingCount + unassignedWaitingCount;
 
       return {
         today: formattedAppointments,
-        waiting: waitingCount
+        waiting: totalWaitingCount
       };
     } catch (error) {
       console.error('Error in fetchAppointments:', error);
       return { today: [], waiting: 0 };
     }
   };
-
   // Fetch scan review statistics
   const fetchScanReviews = async () => {
     if (!supabase || !user) {
@@ -263,23 +268,21 @@ export default function DoctorDashboardPage() {
     }
 
     try {
-      // Query for pending scans assigned to this doctor
+      // Query for all pending scans in the system (for a doctor dashboard, we want to show all pending scans)
       const { data: pendingScans, error: pendingError } = await supabase
         .from('scan_requests')
         .select('id, priority, status, metadata')
-        .eq('assigned_doctor_id', user.id)
         .in('status', ['pending', 'assigned']);
 
       if (pendingError) {
         console.error('Error fetching pending scans:', pendingError);
         return { pending: 0, urgent: 0, recentlyReviewed: 0, aiFlagged: 0 };
-      }
-
-      // Count urgent scans
+      }      // Count urgent scans
       const urgentCount = pendingScans?.filter(scan => scan.priority === 'urgent' || scan.priority === 'high').length || 0;
       
       // Count AI-flagged scans (those with metadata indicating AI prediction)
       const aiFlaggedCount = pendingScans?.filter(scan => {
+        if (!scan.metadata) return false;
         const metadata = scan.metadata as any;
         return metadata && metadata.prediction_result && metadata.prediction_result.confidence < 70;
       }).length || 0;
@@ -566,9 +569,8 @@ export default function DoctorDashboardPage() {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">Avg Response</span>
-                <span className="text-sm font-medium text-gray-600">
-                  {dashboardData.scanAnalytics.averageResponseTime}h
+                <span className="text-xs text-gray-500">Avg Response</span>                <span className="text-sm font-medium text-gray-600">
+                  {dashboardData.scanAnalytics.averageResponseTime.toFixed(1)}h
                 </span>
               </div>
             </div>
@@ -588,11 +590,10 @@ export default function DoctorDashboardPage() {
                 <span className="text-lg font-bold text-red-600">
                   {dashboardData.scanReviews.urgent}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">High Priority</span>
+              </div>              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Medium Priority</span>
                 <span className="text-sm font-medium text-amber-600">
-                  {dashboardData.scanAnalytics.priority.high}
+                  {dashboardData.scanAnalytics.priority.medium}
                 </span>
               </div>
             </div>
