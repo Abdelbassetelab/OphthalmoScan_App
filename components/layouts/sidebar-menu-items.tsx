@@ -42,7 +42,7 @@ export const utilityItemsByRole: Record<string, MenuItem[]> = {
       color: 'text-teal-600'
     },
     { 
-      path: '/help/admin', 
+      path: '/help', 
       label: 'Admin Support', 
       icon: HelpCircle, 
       roleAccess: ['admin'],
@@ -51,21 +51,14 @@ export const utilityItemsByRole: Record<string, MenuItem[]> = {
   ],
   doctor: [
     { 
-      path: '/scans', 
-      label: 'Scan Library', 
-      icon: FileImage, 
-      roleAccess: ['doctor'],
-      color: 'text-teal-600'
-    },
-    { 
-      path: '/settings/doctor', 
+      path: '/settings', 
       label: 'Practice Settings', 
       icon: Settings, 
       roleAccess: ['doctor'],
       color: 'text-teal-600'
     },
     { 
-      path: '/help/doctor', 
+      path: '/help', 
       label: 'Medical Support', 
       icon: HelpCircle, 
       roleAccess: ['doctor'],
@@ -73,22 +66,16 @@ export const utilityItemsByRole: Record<string, MenuItem[]> = {
     }
   ],
   patient: [
+    
     { 
-      path: '/scans', 
-      label: 'My Scans', 
-      icon: FileImage, 
-      roleAccess: ['patient'],
-      color: 'text-teal-600'
-    },
-    { 
-      path: '/settings/patient', 
+      path: '/settings', 
       label: 'Account Settings', 
       icon: Settings, 
       roleAccess: ['patient'],
       color: 'text-teal-600'
     },
     { 
-      path: '/help/patient', 
+      path: '/help', 
       label: 'Patient Support', 
       icon: HelpCircle, 
       roleAccess: ['patient'],
@@ -193,18 +180,18 @@ export const menuItemsByRole: Record<string, MenuItem[]> = {
 
 // Common menu items shared across all roles
 export const commonMenuItems: MenuItem[] = [
-  { 
-    path: '/messages', 
-    label: 'Messages', 
-    icon: MessageSquare, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  },
-  { 
-    path: '/notifications', 
-    label: 'Notifications', 
-    icon: Bell, 
-    roleAccess: ['admin', 'doctor', 'patient'] 
-  },
+  // { 
+  //   path: '/messages', 
+  //   label: 'Messages', 
+  //   icon: MessageSquare, 
+  //   roleAccess: ['admin', 'doctor', 'patient'] 
+  // },
+  // { 
+  //   path: '/notifications', 
+  //   label: 'Notifications', 
+  //   icon: Bell, 
+  //   roleAccess: ['admin', 'doctor', 'patient'] 
+  // },
   { 
     path: '/profile', 
     label: 'Profile', 

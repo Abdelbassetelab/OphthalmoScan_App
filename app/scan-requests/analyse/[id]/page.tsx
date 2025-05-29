@@ -208,7 +208,8 @@ export default function ScanRequestAnalysePage() {
       setImageUrl(null);
     }
   };  const handleAnalyzeImage = async () => {
-    if (!file) {
+    // Check if we have either a locally selected file or an image URL from the database
+    if (!file && !imageUrl) {
       toast({
         title: 'No Image Selected',
         description: 'Please select an image to analyze',
@@ -226,13 +227,14 @@ export default function ScanRequestAnalysePage() {
       return;
     }
 
-    try {
-      setIsAnalyzing(true);
+    try {      setIsAnalyzing(true);
       setResult(null);
       
       // First upload the image to storage if not already uploaded
       let finalImageUrl = imageUrl;
-      if (!finalImageUrl) {
+      let imageToAnalyze = file;
+      
+      if (!finalImageUrl && file) {
         finalImageUrl = await uploadImageToStorage(file);
         
         if (!finalImageUrl) {
@@ -240,8 +242,25 @@ export default function ScanRequestAnalysePage() {
         }
       }
       
+      // If we don't have a local file but have an imageUrl, fetch the image
+      if (!imageToAnalyze && finalImageUrl) {
+        try {
+          const response = await fetch(finalImageUrl);
+          const blob = await response.blob();
+          const fileName = finalImageUrl.split('/').pop() || 'image.jpg';
+          imageToAnalyze = new File([blob], fileName, { type: blob.type });
+        } catch (error) {
+          console.error('Error fetching image from URL:', error);
+          throw new Error('Failed to fetch image from URL for analysis');
+        }
+      }
+      
+      if (!imageToAnalyze) {
+        throw new Error('No image available for analysis');
+      }
+      
       // Analyze the image with user ID
-      const predictionResult = await predictEyeDisease(file, user.id);
+      const predictionResult = await predictEyeDisease(imageToAnalyze, user.id);
       
       if (!predictionResult) {
         throw new Error('Failed to analyze the image');
@@ -287,25 +306,23 @@ export default function ScanRequestAnalysePage() {
             model_version: '1.0', // You can add model version info if available
             analyzed_device: navigator.userAgent || 'Unknown Device',
           };
-          
-          const { error: updateError } = await supabase
+            const { error: updateError } = await supabase
             .from('scan_requests')
             .update({
               metadata: updatedMetadata,
-              status: 'analyzed' // Update status to indicate this scan has been analyzed
+              status: 'assigned' // Use a valid status value that's compatible with the ScanRequest type
             })
             .eq('id', id);
             
           if (updateError) {
             console.error('Error updating scan request metadata:', updateError);
-          } else {
-            // Update the scan request in state with the new metadata
+          } else {            // Update the scan request in state with the new metadata
             setScanRequest(prev => {
               if (!prev) return null;
               return {
                 ...prev,
                 metadata: updatedMetadata,
-                status: 'analyzed'
+                status: 'assigned' // Keep the status compatible with the ScanRequest type
               };
             });
           }
@@ -318,12 +335,13 @@ export default function ScanRequestAnalysePage() {
         title: 'Analysis Complete',
         description: `Primary diagnosis: ${formatCondition(predictionResult.top_prediction)}`,
         variant: 'default',
-      });
-    } catch (error) {
+      });    } catch (error) {
       console.error('Error analyzing image:', error);
       toast({
         title: 'Analysis Failed',
-        description: error instanceof Error ? error.message : 'Failed to analyze the image',
+        description: error instanceof Error 
+          ? error.message 
+          : 'Failed to analyze the image. Please check your connection and try again.',
         variant: 'destructive',
       });
     } finally {
@@ -728,10 +746,9 @@ export default function ScanRequestAnalysePage() {
                 </label>
               </div>
             ) : (
-              <div className="rounded-lg overflow-hidden shadow-md border border-gray-100">
-                <div className="bg-gray-800 px-4 py-2 flex justify-between items-center">
+              <div className="rounded-lg overflow-hidden shadow-md border border-gray-100">                <div className="bg-gray-800 px-4 py-2 flex justify-between items-center">
                   <span className="text-white text-sm font-medium">
-                    {result ? 'Analyzed Retinal Scan' : 'Retinal Scan Image'}
+                    {result ? 'Analyzed Retinal Scan' : imageUrl ? 'Existing Retinal Scan' : 'Uploaded Retinal Scan'}
                     {scanRequest?.metadata?.analyzed_at && (
                       <span className="ml-2 text-gray-300 text-xs">
                         (Analyzed: {new Date(scanRequest.metadata.analyzed_at).toLocaleDateString()})
@@ -781,14 +798,13 @@ export default function ScanRequestAnalysePage() {
                 ) : (
                   // Only show analyze button if we have an image but no analysis yet
                   !result && (
-                    <div className="p-3 bg-gray-50">
-                      <Button
+                    <div className="p-3 bg-gray-50">                      <Button
                         onClick={handleAnalyzeImage}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                         disabled={serviceStatus !== 'online' || isUploading}
                       >
                         <FileImage className="h-4 w-4 mr-2" />
-                        Analyze Retinal Scan
+                        {imageUrl && !file ? 'Analyze Existing Scan' : 'Analyze Uploaded Scan'}
                       </Button>
                     </div>
                   )

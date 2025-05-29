@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +22,7 @@ import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/hooks/use-toast';
 import { useSupabaseWithClerk } from '@/lib/auth/supabase-clerk';
+import { UploadCloud, X, FileImage } from 'lucide-react';
 
 // Form validation schema
 const newScanRequestSchema = z.object({
@@ -34,14 +35,8 @@ const newScanRequestSchema = z.object({
     .min(10, 'Symptoms must be at least 10 characters')
     .max(500, 'Symptoms must not exceed 500 characters'),
   urgency: z
-    .enum(['low', 'medium', 'high'])
-    .default('medium'),
-  has_image: z.boolean().default(false),
-  image_url: z.string().optional(),
-  doctor_notes: z.string().optional(),
-  diagnosis: z.string().optional(),
-  confidence: z.number().optional(),
-  recommendations: z.string().optional()
+    .enum(['low', 'medium', 'high']),
+  has_image: z.boolean()
 });
 
 type NewScanRequestForm = z.infer<typeof newScanRequestSchema>;
@@ -52,22 +47,122 @@ export default function NewScanRequestPage() {
   const { supabase, isLoaded: isSupabaseLoaded } = useSupabaseWithClerk();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [activeSection, setActiveSection] = React.useState("patient-info");
-  
+  const [file, setFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const form = useForm<NewScanRequestForm>({
-    resolver: zodResolver(newScanRequestSchema),
+    resolver: zodResolver(newScanRequestSchema) as any,
     defaultValues: {
       reason: '',
       symptoms: '',
       urgency: 'medium',
-      has_image: false,
-      image_url: '',
-      doctor_notes: '',
-      diagnosis: '',
-      confidence: 0,
-      recommendations: ''
+      has_image: false
     },
-  });  
+  });
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      // Update form has_image value
+      form.setValue('has_image', true);
+      
+      // Create image preview
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
+    setImagePreview(null);
+    form.setValue('has_image', false);
+  };
+
+  const uploadImageToStorage = async (file: File): Promise<string | null> => {
+    if (!supabase || !user) {
+      toast({
+        title: 'Error',
+        description: 'Authentication required for image upload',
+        variant: 'destructive',
+      });
+      return null;
+    }
+    
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+      
+      // File size validation (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: 'File Too Large',
+          description: 'Please select an image under 10MB',
+          variant: 'destructive',
+        });
+        return null;
+      }
+      
+      // Generate a unique file name
+      const fileExt = file.name.split('.').pop();
+      const fileName = `scan-request-${Date.now()}.${fileExt}`;
+      const filePath = `scan-requests/new/${fileName}`;
+      
+      // Start progress simulation
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return prev;
+          }
+          return prev + 10;
+        });
+      }, 300);
+      
+      // Upload the file to the existing 'images' bucket
+      const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      // Clear interval and set to 100% when complete
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      if (error) {
+        console.error('Error uploading image:', error);
+        throw new Error(error.message);
+      }
+      
+      // Get the public URL for the uploaded file
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(data.path);
+      
+      toast({
+        title: 'Upload Complete',
+        description: 'Image uploaded successfully',
+      });
+      
+      return publicUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      toast({
+        title: 'Upload Failed',
+        description: error instanceof Error ? error.message : 'Failed to upload the image',
+        variant: 'destructive',
+      });
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
+  };
   async function onSubmit(data: NewScanRequestForm) {
     if (!supabase || !user) {
       toast({
@@ -91,6 +186,7 @@ export default function NewScanRequestPage() {
           description: 'Description must be at least 10 characters long',
           variant: 'destructive',
         });
+        setIsSubmitting(false);
         return;
       }
       
@@ -100,6 +196,7 @@ export default function NewScanRequestPage() {
           description: 'Symptoms must be at least 10 characters long',
           variant: 'destructive',
         });
+        setIsSubmitting(false);
         return;
       }
       
@@ -108,7 +205,19 @@ export default function NewScanRequestPage() {
         title: 'Submitting Request',
         description: 'Please wait while we process your request...',
       });
-        // Get the username from Clerk user object
+
+      // Upload image if file is selected
+      let imageUrl = null;
+      if (file && data.has_image) {
+        imageUrl = await uploadImageToStorage(file);
+        if (!imageUrl && data.has_image) {
+          toast({
+            title: 'Warning',
+            description: 'Failed to upload image. Proceeding with request without image.',
+            variant: 'destructive',
+          });
+        }
+      }      // Get the username from Clerk user object
       const patientUsername = user.username || 
         (user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : 'Unknown User');
       
@@ -123,8 +232,8 @@ export default function NewScanRequestPage() {
             description: data.reason,
             symptoms: data.symptoms,
             priority: data.urgency,
-            has_image: data.has_image,
-            image_url: data.image_url || null,
+            has_image: !!imageUrl, // Set based on whether we have an image URL
+            image_url: imageUrl, // Use the uploaded image URL
             status: 'pending',
             patient_username: patientUsername, // Add the patient_username field
           }
@@ -154,14 +263,12 @@ export default function NewScanRequestPage() {
       });
     }
   }
-
   // Get the progress percentage based on active section
   const getProgressValue = () => {
     switch (activeSection) {
-      case "patient-info": return 33;
-      case "symptoms-assessment": return 66;
-      case "diagnostic-info": return 100;
-      default: return 33;
+      case "patient-info": return 50;
+      case "symptoms-assessment": return 100;
+      default: return 50;
     }
   };
 
@@ -179,36 +286,31 @@ export default function NewScanRequestPage() {
       
       <Card>
         <CardHeader>
-          <CardTitle>Scan Request Form</CardTitle>
-          <div className="mt-4">
+          <CardTitle>Scan Request Form</CardTitle>          <div className="mt-4">
             <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span>Section {activeSection === "patient-info" ? "1" : activeSection === "symptoms-assessment" ? "2" : "3"} of 3</span>
+              <span>Section {activeSection === "patient-info" ? "1" : "2"} of 2</span>
               <span>{getProgressValue()}% Complete</span>
             </div>
             <Progress value={getProgressValue()} className="h-2" />
           </div>
         </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <CardContent>          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
               <Tabs 
                 defaultValue="patient-info" 
                 value={activeSection} 
                 onValueChange={setActiveSection}
                 className="space-y-4"
-              >
-                <TabsList className="grid w-full grid-cols-3">
+              >                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="patient-info" className="text-xs sm:text-sm">Patient Information</TabsTrigger>
                   <TabsTrigger value="symptoms-assessment" className="text-xs sm:text-sm">Symptoms & Assessment</TabsTrigger>
-                  <TabsTrigger value="diagnostic-info" className="text-xs sm:text-sm">Diagnostic Information</TabsTrigger>
                 </TabsList>
 
                 {/* Section 1: Patient Information */}
                 <TabsContent value="patient-info" className="space-y-6 border rounded-md p-4 bg-gray-50">
                   <h3 className="text-md font-medium text-gray-800 border-b pb-2">Patient Information</h3>
-                  
-                  <FormField
-                    control={form.control}
+                    <FormField
+                    control={form.control as any}
                     name="reason"
                     render={({ field }) => (
                       <FormItem>
@@ -238,9 +340,8 @@ export default function NewScanRequestPage() {
                 {/* Section 2: Symptoms & Assessment */}
                 <TabsContent value="symptoms-assessment" className="space-y-6 border rounded-md p-4 bg-gray-50">
                   <h3 className="text-md font-medium text-gray-800 border-b pb-2">Symptoms & Assessment</h3>
-                  
-                  <FormField
-                    control={form.control}
+                    <FormField
+                    control={form.control as any}
                     name="symptoms"
                     render={({ field }) => (
                       <FormItem>
@@ -255,10 +356,8 @@ export default function NewScanRequestPage() {
                         <FormMessage />
                       </FormItem>
                     )}
-                  />
-
-                  <FormField
-                    control={form.control}
+                  />                  <FormField
+                    control={form.control as any}
                     name="urgency"
                     render={({ field }) => (
                       <FormItem>
@@ -282,46 +381,72 @@ export default function NewScanRequestPage() {
                       </FormItem>
                     )}
                   />
-
-                  <FormField
-                    control={form.control}
-                    name="has_image"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center gap-2 space-y-0">
-                        <FormControl>
-                          <input
-                            type="checkbox"
-                            checked={field.value}
-                            onChange={field.onChange}
-                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  
+                  {/* Image Upload Component */}
+                  <div className="space-y-4">
+                    <FormLabel>Upload Retinal Scan Image (Optional)</FormLabel>
+                    
+                    {!imagePreview ? (
+                      <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-8">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          id="file-upload"
+                          disabled={isSubmitting}
+                        />
+                        <label
+                          htmlFor="file-upload"
+                          className="flex flex-col items-center justify-center cursor-pointer"
+                        >
+                          <div className="bg-white rounded-full p-4 mb-4 shadow-sm">
+                            <UploadCloud className="h-10 w-10 text-blue-500" />
+                          </div>
+                          <span className="text-blue-700 font-medium mb-1">Upload Retinal Scan Image</span>
+                          <span className="text-sm text-blue-600 mb-3">Click to browse or drag and drop</span>
+                          <span className="text-xs text-gray-500">Supported formats: JPG, PNG, JPEG (Max 10MB)</span>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="relative border rounded-lg overflow-hidden">
+                        <div className="absolute top-2 right-2 z-10">
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="h-8 w-8 p-0 rounded-full"
+                            onClick={handleRemoveFile}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="bg-gray-800 px-3 py-2 text-white text-sm font-medium flex items-center">
+                          <FileImage className="h-4 w-4 mr-2" />
+                          {file?.name || 'Selected Image'}
+                        </div>
+                        <div className="aspect-video bg-black flex items-center justify-center">
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
+                            className="max-h-full max-w-full object-contain"
                           />
-                        </FormControl>
-                        <FormLabel className="m-0">Has Image</FormLabel>
-                        <FormMessage />
-                      </FormItem>
+                        </div>                        <div className="px-3 py-2 text-xs text-gray-500">
+                          Size: {file ? Math.round(file.size / 1024) : 0} KB
+                          {isUploading && (
+                            <div className="mt-2">
+                              <div className="bg-gray-200 h-1 w-full rounded-full overflow-hidden">
+                                <div 
+                                  className="bg-blue-600 h-1 transition-all duration-300 ease-in-out" 
+                                  style={{ width: `${uploadProgress}%` }}
+                                ></div>
+                              </div>
+                              <p className="text-xs text-blue-600 mt-1">Uploading: {uploadProgress}%</p>
+                            </div>
+                          )}
+                        </div>                      </div>
                     )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="image_url"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Image URL</FormLabel>
-                        <FormControl>
-                          <input
-                            type="url"
-                            placeholder="Enter image URL"
-                            className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-between">
+                  </div>                  <div className="flex justify-between">
                     <Button 
                       type="button" 
                       variant="outline"
@@ -329,117 +454,14 @@ export default function NewScanRequestPage() {
                     >
                       Previous: Patient Information
                     </Button>
-                    <Button 
-                      type="button" 
-                      onClick={() => setActiveSection("diagnostic-info")}
-                    >
-                      Next: Diagnostic Information
-                    </Button>
-                  </div>
-                </TabsContent>
-
-                {/* Section 3: Diagnostic Information */}
-                <TabsContent value="diagnostic-info" className="space-y-6 border rounded-md p-4 bg-gray-50">
-                  <h3 className="text-md font-medium text-gray-800 border-b pb-2">Diagnostic Information</h3>
-                  
-                  <FormField
-                    control={form.control}
-                    name="doctor_notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Doctor Notes</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Doctor notes will be added after review"
-                            className="min-h-[100px] bg-white"
-                            disabled={true}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="diagnosis"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Diagnosis</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Diagnosis will be added after review"
-                            className="min-h-[100px] bg-white"
-                            disabled={true}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="confidence"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Confidence Level</FormLabel>
-                        <FormControl>
-                          <input
-                            type="number"
-                            min="0"
-                            max="1"
-                            step="0.01"
-                            placeholder="Confidence level (0-1)"
-                            disabled={true}
-                            className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                            {...field}
-                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="recommendations"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Recommendations</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Recommendations will be added after review"
-                            className="min-h-[100px] bg-white"
-                            disabled={true}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className="flex justify-between">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setActiveSection("symptoms-assessment")}
-                    >
-                      Previous: Symptoms & Assessment
-                    </Button>
-                    <div className="flex space-x-4">
-                      <Button
+                    <div className="flex space-x-4">                      <Button
                         type="button"
                         variant="outline"
                         onClick={() => router.back()}
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" disabled={isSubmitting}>
+                      <Button type="submit" disabled={isSubmitting || isUploading}>
                         {isSubmitting ? 'Submitting...' : 'Submit Request'}
                       </Button>
                     </div>
