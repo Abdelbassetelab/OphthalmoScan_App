@@ -162,13 +162,13 @@ export default function PatientDashboardPage() {
         <h3 className="text-lg font-medium text-gray-800 mb-4">Quick Actions</h3>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <a href="/dashboard/patient/scans/upload" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
+          <a href="/scan-requests/new" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
             <Upload className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2 transition-colors" />
             <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">Upload New Scan</span>
           </a>
-            <a href="/dashboard/patient/messages" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
+            <a href="/scan-requests/my-requests" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
             <MessageSquare className="h-8 w-8 text-gray-500 group-hover:text-[#0A84FF] mb-2 transition-colors" />
-            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">Message Doctor</span>
+            <span className="text-sm font-medium text-gray-700 group-hover:text-[#0A84FF] transition-colors">History</span>
           </a>
           
           <a href="/dashboard/patient/prescriptions/refill" className="flex flex-col items-center p-3 bg-gray-50 rounded-lg hover:bg-blue-50 transition-colors group">
