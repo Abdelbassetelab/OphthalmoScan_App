@@ -420,13 +420,7 @@ The application can be deployed using:
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 👥 Team
-
-- Frontend Development: [Your Name]
-- Backend Development: [Your Name]
-- AI Model Development: [Your Name]
-- UI/UX Design: [Your Name]
 
 ## 📞 Support
 
-For support, please contact [your-email@example.com]
+For support, please contact abdelbasset.elabbadii@gmail.com
